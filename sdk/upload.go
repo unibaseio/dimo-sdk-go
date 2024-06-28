@@ -6,42 +6,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"mime/multipart"
 	"net"
 	"net/http"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/MOSSV2/dimo-sdk-go/lib/archive"
 	"github.com/MOSSV2/dimo-sdk-go/lib/bls"
 	"github.com/MOSSV2/dimo-sdk-go/lib/types"
+
 	darchive "github.com/docker/docker/pkg/archive"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/mitchellh/go-homedir"
 	"github.com/schollz/progressbar/v3"
 )
 
-func Disorder(array []types.EdgeReceipt) {
-	var temp types.EdgeReceipt
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := len(array) - 1; i >= 0; i-- {
-		num := r.Intn(i + 1)
-		temp = array[i]
-		array[i] = array[num]
-		array[num] = temp
-	}
-}
-
-func UploadToStream(baseUrl string, auth types.Auth, filePath string, name string) (types.FileReceipt, common.Address, error) {
-	var res types.FileReceipt
-	sinfo, err := Info(baseUrl)
-	if err != nil {
-		return res, common.Address{}, err
-	}
-
+func Upload(baseUrl string, auth types.Auth, policy types.Policy, filePath string, name string) (types.FileFull, common.Address, error) {
+	var res types.FileFull
 	er, err := ListEdge(baseUrl, auth, types.StreamType)
 	if err != nil {
 		return res, common.Address{}, err
@@ -73,45 +58,30 @@ func UploadToStream(baseUrl string, auth types.Auth, filePath string, name strin
 		if em.Type != types.StreamType {
 			continue
 		}
-		fr, err := UploadData(em.ExposeURL, auth, filePath)
+		fr, err := UploadData(em.ExposeURL, auth, policy, filePath)
 		if err != nil {
 			logger.Debug("upload: ", filePath, " to: ", em.ExposeURL, " fail: ", err)
-			if !strings.Contains(err.Error(), "already has file") {
-				continue
+			if strings.Contains(err.Error(), "already has") {
+				return res, em.Name, err
 			}
 		}
 
 		if name != "" {
 			fr.Name = name
-			fr.OnlyPiece = true
+			//fr.OnlyPiece = true
 		}
 
 		logger.Debug("upload meta: ", filePath, " to: ", baseUrl)
-		res, err := UploadFileMeta(baseUrl, auth, em.Name, fr)
-		return res, em.Name, err
+		err = UploadFileMeta(baseUrl, auth, fr.FileReceipt)
+		return fr, em.Name, err
 	}
 
-	fr, err := UploadData(baseUrl, auth, filePath)
-	if err != nil {
-		return res, common.Address{}, err
-	}
-
-	res.FileCore = fr.FileCore
-
-	if name != "" && fr.Name != name {
-		fr.Name = name
-		fr.OnlyPiece = true
-		logger.Debug("upload meta: ", filePath, " to: ", baseUrl)
-		res, err = UploadFileMeta(baseUrl, auth, sinfo.Name, fr)
-		return res, sinfo.Name, err
-	}
-
-	return res, sinfo.Name, err
+	return res, common.Address{}, fmt.Errorf("no avail streamer")
 }
 
-func UploadData(baseUrl string, auth types.Auth, filePath string) (types.FileCoreWithSize, error) {
+func UploadData(baseUrl string, auth types.Auth, policy types.Policy, filePath string) (types.FileFull, error) {
 	logger.Debug("upload: ", filePath, " to: ", baseUrl)
-	var res types.FileCoreWithSize
+	var res types.FileFull
 	p, err := homedir.Expand(filePath)
 	if err != nil {
 		return res, err
@@ -124,6 +94,16 @@ func UploadData(baseUrl string, auth types.Auth, filePath string) (types.FileCor
 	go func() {
 		defer ipw.Close()
 		defer mwriter.Close()
+
+		err = mwriter.WriteField("rsn", strconv.Itoa(int(policy.N)))
+		if err != nil {
+			return
+		}
+
+		err = mwriter.WriteField("rsk", strconv.Itoa(int(policy.K)))
+		if err != nil {
+			return
+		}
 
 		part, err := mwriter.CreateFormFile("file", p)
 		if err != nil {

@@ -10,12 +10,13 @@ import (
 )
 
 const (
-	ClientType  = "client"
-	StoreType   = "store"
-	StreamType  = "stream"
-	ComputeType = "compute"
-	GatewatType = "gateway"
-	HubType     = "hub"
+	StoreType     = "store"
+	StreamType    = "stream"
+	ValidatorType = "validator"
+	ComputeType   = "compute"
+	GatewayType   = "gateway"
+	ClientType    = "client"
+	HubType       = "hub"
 )
 
 type EdgeReceipt struct {

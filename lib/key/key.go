@@ -150,7 +150,7 @@ func BuildAuth(sk *ecdsa.PrivateKey, hash []byte) (types.Auth, error) {
 }
 
 func BuildAuthLocal(hash []byte) types.Auth {
-	ks := keystore.NewPlaintextKeyStore("/tmp")
+	ks := keystore.NewKeyStore("/tmp/.dimo", keystore.StandardScryptN, keystore.StandardScryptP)
 	laccount, _ := ks.NewAccount("test")
 
 	h := sha256.New()
@@ -162,7 +162,7 @@ func BuildAuthLocal(hash []byte) types.Auth {
 
 	sum := h.Sum(nil)
 
-	ks.Unlock(laccount, "")
+	ks.Unlock(laccount, "test")
 	sign, err := ks.SignHash(laccount, sum[:])
 	if err != nil {
 		panic(err)

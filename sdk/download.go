@@ -3,7 +3,6 @@ package sdk
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net/url"
@@ -13,20 +12,124 @@ import (
 	"time"
 
 	"github.com/MOSSV2/dimo-sdk-go/lib/bls"
-	"github.com/MOSSV2/dimo-sdk-go/lib/lighthash"
-	"github.com/MOSSV2/dimo-sdk-go/lib/merkle"
+	"github.com/MOSSV2/dimo-sdk-go/lib/bls/erasure"
 	"github.com/MOSSV2/dimo-sdk-go/lib/types"
-	"github.com/MOSSV2/dimo-sdk-go/lib/utils"
+
 	"github.com/ethereum/go-ethereum/common"
 	"golang.org/x/sync/semaphore"
 )
 
-func DownloadPieceOrigin(baseUrl string, auth types.Auth, name string) ([]byte, error) {
+func DownloadPiece(baseUrl string, auth types.Auth, name string) (types.PieceCore, []byte, error) {
 	logger.Debug("download piece: ", name, " from: ", baseUrl)
+	pr, err := GetPieceReceipt(baseUrl, auth, name)
+	if err != nil {
+		return pr.PieceCore, nil, err
+	}
+
+	res := make([][]byte, pr.Policy.N)
+	suc := 0
+	need := make([]int, 0, pr.Policy.K)
+	survived := make([]int, 0, pr.Policy.K)
+	for i, rep := range pr.Replicas {
+		if rep == "" {
+			logger.Warnf("piece %s %d is not stored", pr.Name, i)
+			continue
+		}
+		suc++
+	}
+	streamURL := ""
+	if suc < int(pr.Policy.K) {
+		er, err := GetEdge(baseUrl, auth, pr.Streamer)
+		if err != nil {
+			return pr.PieceCore, nil, err
+		}
+		streamURL = er.ExposeURL
+		pr, err = GetPieceReceipt(streamURL, auth, name)
+		if err != nil {
+			return pr.PieceCore, nil, err
+		}
+	}
+
+	suc = 0
+	for i, rep := range pr.Replicas {
+		val, err := DownloadReplica(baseUrl, streamURL, auth, rep, pr.StoredOn[i])
+		if err != nil || len(val) == 0 {
+			if i < int(pr.Policy.K) {
+				need = append(need, i)
+			}
+			logger.Debugf("%s download fail: %v", rep, err)
+			continue
+		}
+
+		res[i] = val
+		suc++
+		survived = append(survived, i)
+		if suc >= int(pr.Policy.K) {
+			break
+		}
+	}
+	if suc < int(pr.Policy.K) {
+		return pr.PieceCore, nil, fmt.Errorf("no enough replica")
+	}
+	// repair
+	if len(need) > 0 {
+		slen := len(res[survived[0]]) / bls.PadSize
+		for _, v := range need {
+			res[v] = make([]byte, 0, slen*bls.PadSize)
+		}
+
+		rs, err := erasure.NewRS(int(pr.Policy.N), int(pr.Policy.K))
+		if err != nil {
+			return pr.PieceCore, nil, err
+		}
+		re, err := rs.NewReconst(survived)
+		if err != nil {
+			return pr.PieceCore, nil, err
+		}
+		encoded := make([][]byte, int(pr.Policy.K))
+		for i := 0; i < slen; i++ {
+			for j := 0; j < int(pr.Policy.K); j++ {
+				encoded[j] = res[survived[j]][i*bls.PadSize : (i+1)*bls.PadSize]
+			}
+			par, err := re.Encode(encoded, need)
+			if err != nil {
+				return pr.PieceCore, nil, err
+			}
+			for i, v := range need {
+				res[v] = append(res[v], par[i]...)
+			}
+		}
+	}
+
+	pbyte := make([]byte, 0, pr.Size)
+	for i := 0; i < int(pr.Policy.K); i++ {
+		data, err := bls.Unpad(res[i])
+		if err != nil {
+			return pr.PieceCore, nil, err
+		}
+		pbyte = append(pbyte, data...)
+	}
+
+	return pr.PieceCore, pbyte[:pr.Size], nil
+}
+
+func DownloadReplica(baseUrl, streamUrl string, auth types.Auth, name string, addr common.Address) ([]byte, error) {
+	if addr != types.EmptyAddr {
+		res, err := DownloadReplicaFromStream(baseUrl, auth, name, addr)
+		if err == nil {
+			return res, nil
+		}
+	}
+
+	return DownloadReplicaOrigin(streamUrl, auth, name)
+}
+
+func DownloadReplicaOrigin(baseUrl string, auth types.Auth, name string) ([]byte, error) {
 	form := url.Values{}
 	form.Set("name", name)
-	form.Set("type", "piece")
+	form.Set("type", "replica")
 
+	logger.Debug("download replica: ", name, " at:", baseUrl)
 	ctx, cancle := context.WithTimeout(context.TODO(), 5*time.Minute)
 	defer cancle()
 	resByte, err := doRequest(ctx, baseUrl, "/api/download", auth, strings.NewReader(form.Encode()))
@@ -34,29 +137,11 @@ func DownloadPieceOrigin(baseUrl string, auth types.Auth, name string) ([]byte, 
 		return nil, err
 	}
 
-	padbytes := bls.Pad(resByte)
-	root, err := merkle.ReaderRoot(bytes.NewBuffer(padbytes), lighthash.New(), bls.PadSize)
-	if err != nil {
-		return nil, err
-	}
-
-	if strings.Compare(name, hex.EncodeToString(root)) != 0 {
-		return nil, fmt.Errorf("invalid data for: %s", name)
-	}
-
 	return resByte, nil
 }
 
-func DownloadReplica(baseUrl string, auth types.Auth, piece, name string, addr common.Address, size int) ([]byte, error) {
-	res, err := DownloadReplicaOrigin(baseUrl, auth, piece, name, addr, size)
-	if err != nil {
-		return DownloadReplicaFromStream(baseUrl, auth, piece, name, addr, size)
-	}
-	return res, nil
-}
-
-func DownloadReplicaFromStream(baseUrl string, auth types.Auth, piece, name string, addr common.Address, size int) ([]byte, error) {
-	logger.Debug("download replica: ", name, " from stream")
+func DownloadReplicaFromStream(baseUrl string, auth types.Auth, name string, addr common.Address) ([]byte, error) {
+	logger.Debug("download replica: ", name, " via stream")
 	el, err := ListEdge(baseUrl, auth, types.StreamType)
 	if err != nil {
 		return nil, err
@@ -67,135 +152,39 @@ func DownloadReplicaFromStream(baseUrl string, auth types.Auth, piece, name stri
 	form.Set("storedOn", addr.String())
 
 	for _, er := range el.Edges {
-		logger.Debug("download replica: ", name, " from stream: ", er.Name, " at: ", er.ExposeURL)
+		logger.Debug("download replica: ", name, " via stream: ", er.Name, " at: ", er.ExposeURL)
 		ctx, cancle := context.WithTimeout(context.TODO(), 5*time.Minute)
 		defer cancle()
 		resByte, err := doRequest(ctx, er.ExposeURL, "/api/download", auth, strings.NewReader(form.Encode()))
 		if err != nil {
 			continue
 		}
-		err = bls.SlothDecode(resByte, addr.Bytes())
-		if err != nil {
-			continue
-		}
-
-		root, err := merkle.ReaderRoot(bytes.NewBuffer(resByte), lighthash.New(), bls.PadSize)
-		if err != nil {
-			continue
-		}
-
-		if strings.Compare(piece, hex.EncodeToString(root)) != 0 {
-			continue
-		}
-
-		resByte, err = bls.Unpad(resByte, size)
-		if err != nil {
-			continue
-		}
 
 		return resByte, nil
 	}
-	return nil, fmt.Errorf("fail")
+	return nil, fmt.Errorf("no avail stream")
 }
 
-func DownloadReplicaOrigin(baseUrl string, auth types.Auth, piece, name string, addr common.Address, size int) ([]byte, error) {
-	logger.Debug("download replica: ", name, " from store")
-	er, err := GetEdge(baseUrl, auth, addr)
-	if err != nil {
-		return nil, err
-	}
-
-	form := url.Values{}
-	form.Set("name", name)
-
-	logger.Debug("download replica: ", name, "from store: ", er.Name, " at:", er.ExposeURL)
-	ctx, cancle := context.WithTimeout(context.TODO(), 5*time.Minute)
-	defer cancle()
-	resByte, err := doRequest(ctx, er.ExposeURL, "/api/download", auth, strings.NewReader(form.Encode()))
-	if err != nil {
-		return nil, err
-	}
-
-	err = bls.SlothDecode(resByte, addr.Bytes())
-	if err != nil {
-		return nil, err
-	}
-
-	root, err := merkle.ReaderRoot(bytes.NewBuffer(resByte), lighthash.New(), bls.PadSize)
-	if err != nil {
-		return nil, err
-	}
-
-	if strings.Compare(piece, hex.EncodeToString(root)) != 0 {
-		return nil, fmt.Errorf("invalid data for: %s %s", piece, name)
-	}
-
-	resByte, err = bls.Unpad(resByte, size)
-	if err != nil {
-		return nil, err
-	}
-
-	return resByte, nil
-}
-
-func DownloadPiece(baseUrl string, auth types.Auth, name string) ([]byte, error) {
-	logger.Debug("download: ", name, " from: ", baseUrl)
-	pr, err := GetPieceReceipt(baseUrl, auth, name)
-	if err != nil {
-		return nil, err
-	}
-	if len(pr.Replicas) == 0 {
-		url := baseUrl
-		stream, err := GetEdge(baseUrl, auth, pr.StoredOn[0])
-		if err == nil {
-			url = stream.ExposeURL
-		}
-
-		return DownloadPieceOrigin(url, auth, name)
-	}
-	rmap := make(map[string]common.Address)
-	for i, rep := range pr.Replicas {
-		rmap[rep] = pr.StoredOn[i]
-	}
-
-	utils.ShuffleString(pr.Replicas)
-	for _, rep := range pr.Replicas {
-		val, err := DownloadReplicaFromStream(baseUrl, auth, name, rep, rmap[rep], int(pr.Size))
-		if err != nil {
-			logger.Debugf("fail download replica %s %s", rep, err)
-			continue
-		}
-
-		return val, nil
-	}
-
-	return DownloadPieceOrigin(baseUrl, auth, name)
-}
-
-func DownloadPieceAndSave(baseUrl string, auth types.Auth, com string, ks types.IReplicaStore) error {
+func DownloadPieceAndSave(baseUrl string, auth types.Auth, com string, ks types.IPieceStore) error {
 	if ks != nil {
-		_, err := ks.Get(context.TODO(), com, nil, types.Options{})
+		_, err := ks.GetPiece(context.TODO(), com, nil, types.Options{})
 		if err == nil {
 			return nil
 		}
 	}
 
-	resByte, err := DownloadPiece(baseUrl, auth, com)
+	pc, resByte, err := DownloadPiece(baseUrl, auth, com)
 	if err != nil {
 		return err
 	}
 
 	if ks != nil {
-		pr, err := GetPieceReceipt(baseUrl, auth, com)
-		if err != nil {
-			return err
-		}
-		ks.Put(context.TODO(), pr.PieceCore, resByte)
+		ks.PutPiece(context.TODO(), pc, resByte, true)
 	}
 	return nil
 }
 
-func CheckFile(baseUrl string, auth types.Auth, name string, ks types.IReplicaStore) error {
+func CheckFile(baseUrl string, auth types.Auth, name string, ks types.IPieceStore) error {
 	fr, err := GetFileReceipt(baseUrl, auth, name)
 	if err != nil {
 		return err
@@ -211,7 +200,7 @@ func CheckFile(baseUrl string, auth types.Auth, name string, ks types.IReplicaSt
 	return nil
 }
 
-func CheckFileParallel(baseUrl string, auth types.Auth, name string, parallel int, ks types.IReplicaStore) error {
+func CheckFileParallel(baseUrl string, auth types.Auth, name string, parallel int, ks types.IPieceStore) error {
 	logger.Debug("download piece in parallel: ", parallel)
 	fr, err := GetFileReceipt(baseUrl, auth, name)
 	if err != nil {
@@ -220,60 +209,47 @@ func CheckFileParallel(baseUrl string, auth types.Auth, name string, parallel in
 
 	var wg sync.WaitGroup
 	sm := semaphore.NewWeighted(int64(parallel))
-	for _, com := range fr.Pieces {
+	for i, com := range fr.Pieces {
 		err := sm.Acquire(context.TODO(), 1)
 		if err != nil {
 			return err
 		}
 		wg.Add(1)
-		go func(com string, ks types.IReplicaStore) {
+		go func(ni int, com string, ks types.IPieceStore) {
 			defer sm.Release(1)
 			defer wg.Done()
 
 			DownloadPieceAndSave(baseUrl, auth, com, ks)
-		}(com, ks)
+		}(i, com, ks)
 	}
 	wg.Wait()
 
 	return nil
 }
 
-func Download(baseUrl string, auth types.Auth, name string, ks types.IReplicaStore, w io.Writer) error {
+func Download(baseUrl string, auth types.Auth, name string, ks types.IPieceStore, w io.Writer) error {
 	fr, err := GetFileReceipt(baseUrl, auth, name)
 	if err != nil {
 		return err
 	}
 
 	for _, com := range fr.Pieces {
-		pr, err := GetPieceReceipt(baseUrl, auth, com)
-		if err != nil {
-			return err
-		}
-
 		if ks != nil {
 			var b bytes.Buffer
-			_, err := ks.Get(context.TODO(), com, &b, types.Options{
-				UserDefined: map[string]string{
-					"unpad": strconv.FormatInt(pr.Size, 10),
-				},
-			})
+			_, err := ks.GetPiece(context.TODO(), com, &b, types.Options{})
 			if err == nil {
 				w.Write(b.Bytes())
 				continue
 			}
 		}
 
-		resByte, err := DownloadPiece(baseUrl, auth, com)
+		pc, resByte, err := DownloadPiece(baseUrl, auth, com)
 		if err != nil {
 			return err
 		}
 
 		if ks != nil {
-			pr, err := GetPieceReceipt(baseUrl, auth, com)
-			if err != nil {
-				return err
-			}
-			ks.Put(context.TODO(), pr.PieceCore, resByte)
+			ks.PutPiece(context.TODO(), pc, resByte, true)
 		}
 
 		w.Write(resByte)
@@ -282,7 +258,7 @@ func Download(baseUrl string, auth types.Auth, name string, ks types.IReplicaSto
 	return nil
 }
 
-func DownloadParallel(baseUrl string, auth types.Auth, name string, parallel int, ks types.IReplicaStore, w io.Writer) error {
+func DownloadParallel(baseUrl string, auth types.Auth, name string, parallel int, ks types.IPieceStore, w io.Writer) error {
 	if ks != nil {
 		err := CheckFileParallel(baseUrl, auth, name, parallel, ks)
 		if err != nil {
@@ -294,7 +270,7 @@ func DownloadParallel(baseUrl string, auth types.Auth, name string, parallel int
 }
 
 // todo: handle size > piece size
-func DownloadWSize(baseUrl string, auth types.Auth, name string, ks types.IReplicaStore, w io.Writer, start, size int64) error {
+func DownloadWSize(baseUrl string, auth types.Auth, name string, ks types.IPieceStore, w io.Writer, start, size int64) error {
 	logger.Debugf("download file %s %d %d ", name, start, size)
 	fr, err := GetFileReceipt(baseUrl, auth, name)
 	if err != nil {
@@ -322,33 +298,26 @@ func DownloadWSize(baseUrl string, auth types.Auth, name string, ks types.IRepli
 
 		if ks != nil {
 			var b bytes.Buffer
-			_, err := ks.Get(context.TODO(), com, &b, types.Options{
-				UserDefined: map[string]string{
-					"unpad": strconv.FormatInt(pr.Size, 10),
-					"start": strconv.FormatInt(pstart, 10),
-					"size":  strconv.FormatInt(size, 10),
-				},
-			})
+			_, err := ks.GetPiece(context.TODO(), com, &b, types.Options{})
 			if err == nil {
 				_, err = w.Write(b.Bytes())
 				return err
 			}
 		}
 
-		resByte, err := DownloadPiece(baseUrl, auth, com)
+		pc, resByte, err := DownloadPiece(baseUrl, auth, com)
 		if err != nil {
 			return err
 		}
 
 		if ks != nil {
-			_, err = ks.Put(context.TODO(), pr.PieceCore, resByte)
+			err = ks.PutPiece(context.TODO(), pc, resByte, true)
 			if err != nil {
 				return err
 			}
 			var b bytes.Buffer
-			_, err = ks.Get(context.TODO(), com, &b, types.Options{
+			_, err = ks.GetPiece(context.TODO(), com, &b, types.Options{
 				UserDefined: map[string]string{
-					"unpad": strconv.FormatInt(pr.Size, 10),
 					"start": strconv.FormatInt(pstart, 10),
 					"size":  strconv.FormatInt(size, 10),
 				},

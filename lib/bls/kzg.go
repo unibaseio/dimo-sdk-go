@@ -9,7 +9,6 @@ import (
 
 	"github.com/MOSSV2/dimo-sdk-go/lib/types"
 
-	bls "github.com/consensys/gnark-crypto/ecc/bls12-377"
 	"github.com/consensys/gnark-crypto/ecc/bls12-377/kzg"
 )
 
@@ -30,7 +29,7 @@ func (pk *PublicKey) GenCommitments(slen int, r io.Reader) ([]types.ICommitment,
 			continue
 		}
 
-		c, err := pk.GenCommitment(slen, data[:n])
+		c, err := pk.GenCommitment(slen, data[:n], 0)
 		if err != nil {
 			return nil, err
 		}
@@ -40,21 +39,29 @@ func (pk *PublicKey) GenCommitments(slen int, r io.Reader) ([]types.ICommitment,
 	return res, nil
 }
 
-func (pk *PublicKey) GenCommitment(slen int, d []byte) (types.ICommitment, error) {
+func (pk *PublicKey) GenCommitment(slen int, d []byte, offset int) (types.ICommitment, error) {
+	if len(d) == 32 && slen > 32 {
+		return pk.genCommitmentInTree(slen, d)
+	}
+
 	if len(d) == 0 {
 		return nil, fmt.Errorf("zero size")
 	}
 
-	if len(d) == 32 && slen > 32 {
-		return pk.genCommitment(slen, d)
-	}
-
 	shards := Split(slen, d)
-	if len(shards) > MaxShard || len(shards) < MinShard {
-		return nil, fmt.Errorf("invalid data shards %d: too large or short", len(shards))
+	if len(shards) > MaxShard {
+		return nil, fmt.Errorf("invalid data shards %d: too large", len(shards))
 	}
 
-	temp, err := kzg.Commit(shards, pk.Pk)
+	if len(shards) < MinShard {
+		var fr Fr
+		shards = append(shards, fr)
+	}
+
+	srs := kzg.ProvingKey{
+		G1: pk.Pk.G1[offset:],
+	}
+	temp, err := kzg.Commit(shards, srs)
 	if err != nil {
 		return nil, err
 	}
@@ -62,9 +69,14 @@ func (pk *PublicKey) GenCommitment(slen int, d []byte) (types.ICommitment, error
 	return NewCommitment(temp.Marshal())
 }
 
-func (pk *PublicKey) genCommitment(slen int, v []byte) (types.ICommitment, error) {
+// for commit tree
+func (pk *PublicKey) genCommitmentInTree(slen int, v []byte) (types.ICommitment, error) {
 	if len(v) != 32 {
 		return nil, fmt.Errorf("zero size")
+	}
+
+	if slen < 2 {
+		return nil, fmt.Errorf("small slen")
 	}
 
 	shards := make([]Fr, slen)
@@ -115,84 +127,14 @@ func (pk *PublicKey) GenProofs(ic types.IChallenge, slen int, r io.Reader) ([]ty
 }
 
 func (pk *PublicKey) GenProof(ic types.IChallenge, slen int, d []byte) (types.IProof, error) {
-	chal, ok := ic.(*Challenge)
-	if !ok {
-		return nil, fmt.Errorf("invalid chal")
+	switch ic.Type() {
+	case 0, 1:
+		return pk.GenProof1(ic, slen, d)
+	case 2:
+		return pk.GenProof2(ic, slen, d)
+	default:
+		return nil, fmt.Errorf("unsupported proof type: %d", ic.Type())
 	}
-	if len(d) == 0 {
-		return nil, fmt.Errorf("zero size")
-	}
-
-	shards := Split(slen, d)
-	if len(shards) > MaxShard || len(shards) < MinShard {
-		return nil, fmt.Errorf("invalid data shards %d: too large or short", len(shards))
-	}
-
-	var fr_r Fr
-	fr_r.SetBytes(chal.RandomByte)
-
-	op, err := kzg.Open(shards, fr_r, pk.Pk)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Proof{
-		H:            op.H,
-		ClaimedValue: op.ClaimedValue,
-	}, nil
-}
-
-func (vk *VerifyKey) VerifyProof(ir types.IChallenge, ip types.IProof) error {
-	pf, ok := ip.(*Proof)
-	if !ok {
-		return fmt.Errorf("wrong proof")
-	}
-
-	chal, ok := ir.(*Challenge)
-	if !ok {
-		return fmt.Errorf("wrong chal")
-	}
-
-	var fr_r Fr
-	fr_r.SetBytes(chal.RandomByte)
-
-	icp := ir.Commitment()
-	com, ok := icp.(*Commitment)
-	if !ok {
-		return fmt.Errorf("wrong proof1 commit")
-	}
-
-	// [f(r)]G₁
-	var claimedValueG1Aff G1Jac
-	bval := new(big.Int)
-	pf.ClaimedValue.BigInt(bval)
-	claimedValueG1Aff.ScalarMultiplicationAffine(&vk.G1, bval)
-
-	// [f(r) - f(s)]G₁
-	var comG1Jac G1Jac
-	comG1Jac.FromAffine(&com.Value)
-	claimedValueG1Aff.SubAssign(&comG1Jac)
-
-	// [f(r) - f(s)]G₁ - r*H
-	fr_r.BigInt(bval)
-	comG1Jac.ScalarMultiplicationAffine(&pf.H, bval)
-	claimedValueG1Aff.SubAssign(&comG1Jac)
-
-	var left G1
-	left.FromJacobian(&claimedValueG1Aff)
-
-	// e([f(r) - f(s)]G₁-r*H, G₂).e(H, [s]G₂) ==? 1
-	check, err := bls.PairingCheck(
-		[]G1{left, pf.H},
-		[]G2{vk.G2[0], vk.G2[1]},
-	)
-	if err != nil {
-		return err
-	}
-	if !check {
-		return fmt.Errorf("can't verify opening proof")
-	}
-	return nil
 }
 
 var _ types.IVerifyKey = (*VerifyKey)(nil)
@@ -207,6 +149,17 @@ func NewKZGVerifyKey(data []byte) (*VerifyKey, error) {
 	}
 	err := vk.Deserialize(data)
 	return vk, err
+}
+
+func (vk *VerifyKey) VerifyProof(ir types.IChallenge, ip types.IProof) error {
+	switch ip.Type() {
+	case 1:
+		return vk.VerifyProof1(ir, ip)
+	case 2:
+		return vk.VerifyProof2(ir, ip)
+	default:
+		return fmt.Errorf("unsupported proof type: %d", ip.Type())
+	}
 }
 
 func (vk *VerifyKey) Serialize() []byte {
@@ -272,7 +225,7 @@ func (pk *PublicKey) Deserialize(buf []byte) error {
 func GenKZGKey(num uint64, seed *big.Int) *PublicKey {
 	kzgSRS, err := kzg.NewSRS(num, seed)
 	if err != nil {
-		return nil
+		panic(err)
 	}
 
 	pk := &PublicKey{

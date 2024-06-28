@@ -1,6 +1,7 @@
 package sdk
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -155,4 +156,30 @@ func TestList(t *testing.T) {
 	}
 
 	t.Fatal()
+}
+
+func TestDecode(t *testing.T) {
+	pa := "~/dimo-go/bin/stream-edge"
+	pb := "~/as"
+
+	pa, _ = homedir.Expand(pa)
+	pb, _ = homedir.Expand(pb)
+
+	fa, err := os.Open(pa)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fb, err := os.Open(pb)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bufa := make([]byte, 8)
+	bufb := make([]byte, 8)
+	fa.ReadAt(bufa, 9901120*0)
+	fb.ReadAt(bufb, 9901120*0)
+
+	if !bytes.Equal(bufa, bufb) {
+		t.Fatal("not equal", hex.EncodeToString(bufa), hex.EncodeToString(bufb))
+	}
 }

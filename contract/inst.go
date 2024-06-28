@@ -4,17 +4,21 @@ import (
 	"context"
 
 	"github.com/MOSSV2/dimo-sdk-go/contract/go/bank"
-	"github.com/MOSSV2/dimo-sdk-go/contract/go/bls"
 	"github.com/MOSSV2/dimo-sdk-go/contract/go/control"
 	"github.com/MOSSV2/dimo-sdk-go/contract/go/epoch"
-	"github.com/MOSSV2/dimo-sdk-go/contract/go/file"
+	"github.com/MOSSV2/dimo-sdk-go/contract/go/eproof"
+	"github.com/MOSSV2/dimo-sdk-go/contract/go/everify"
 	"github.com/MOSSV2/dimo-sdk-go/contract/go/gpu"
 	"github.com/MOSSV2/dimo-sdk-go/contract/go/model"
 	"github.com/MOSSV2/dimo-sdk-go/contract/go/node"
-	"github.com/MOSSV2/dimo-sdk-go/contract/go/proof"
-	"github.com/MOSSV2/dimo-sdk-go/contract/go/round"
+	"github.com/MOSSV2/dimo-sdk-go/contract/go/piece"
+	"github.com/MOSSV2/dimo-sdk-go/contract/go/plonk/kzg"
+	"github.com/MOSSV2/dimo-sdk-go/contract/go/plonk/rsone"
+	"github.com/MOSSV2/dimo-sdk-go/contract/go/reward"
+	"github.com/MOSSV2/dimo-sdk-go/contract/go/rsproof"
 	"github.com/MOSSV2/dimo-sdk-go/contract/go/space"
 	"github.com/MOSSV2/dimo-sdk-go/contract/go/token"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
@@ -96,7 +100,7 @@ func NewNode(ctx context.Context) (*node.Node, error) {
 	return node.NewNode(naddr, client)
 }
 
-func NewFile(ctx context.Context) (*file.File, error) {
+func NewPiece(ctx context.Context) (*piece.Piece, error) {
 	client, err := ethclient.DialContext(ctx, DevChain)
 	if err != nil {
 		return nil, err
@@ -106,14 +110,14 @@ func NewFile(ctx context.Context) (*file.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	faddr, err := bi.Get(&bind.CallOpts{From: Base}, "file")
+	faddr, err := bi.Get(&bind.CallOpts{From: Base}, "piece")
 	if err != nil {
 		return nil, err
 	}
-	return file.NewFile(faddr, client)
+	return piece.NewPiece(faddr, client)
 }
 
-func NewRound(ctx context.Context) (*round.Round, error) {
+func NewReward(ctx context.Context) (*reward.Reward, error) {
 	client, err := ethclient.DialContext(ctx, DevChain)
 	if err != nil {
 		return nil, err
@@ -123,14 +127,14 @@ func NewRound(ctx context.Context) (*round.Round, error) {
 	if err != nil {
 		return nil, err
 	}
-	raddr, err := bi.Get(&bind.CallOpts{From: Base}, "round")
+	faddr, err := bi.Get(&bind.CallOpts{From: Base}, "reward")
 	if err != nil {
 		return nil, err
 	}
-	return round.NewRound(raddr, client)
+	return reward.NewReward(faddr, client)
 }
 
-func NewProof(ctx context.Context) (*proof.Proof, error) {
+func NewRSProof(ctx context.Context) (*rsproof.RSProof, error) {
 	client, err := ethclient.DialContext(ctx, DevChain)
 	if err != nil {
 		return nil, err
@@ -140,11 +144,113 @@ func NewProof(ctx context.Context) (*proof.Proof, error) {
 	if err != nil {
 		return nil, err
 	}
-	paddr, err := bi.Get(&bind.CallOpts{From: Base}, "proof")
+	faddr, err := bi.Get(&bind.CallOpts{From: Base}, "rsproof")
 	if err != nil {
 		return nil, err
 	}
-	return proof.NewProof(paddr, client)
+	return rsproof.NewRSProof(faddr, client)
+}
+
+func NewRSOne(ctx context.Context) (*rsone.PlonkVerifier, error) {
+	client, err := ethclient.DialContext(ctx, DevChain)
+	if err != nil {
+		return nil, err
+	}
+
+	bi, err := bank.NewBank(BankAddr, client)
+	if err != nil {
+		return nil, err
+	}
+	faddr, err := bi.Get(&bind.CallOpts{From: Base}, "rsone")
+	if err != nil {
+		return nil, err
+	}
+	return rsone.NewPlonkVerifier(faddr, client)
+}
+
+func NewKZGPlonk(ctx context.Context) (*kzg.PlonkVerifier, error) {
+	client, err := ethclient.DialContext(ctx, DevChain)
+	if err != nil {
+		return nil, err
+	}
+
+	bi, err := bank.NewBank(BankAddr, client)
+	if err != nil {
+		return nil, err
+	}
+	faddr, err := bi.Get(&bind.CallOpts{From: Base}, "kzg")
+	if err != nil {
+		return nil, err
+	}
+	return kzg.NewPlonkVerifier(faddr, client)
+}
+
+func NewMulPlonk(ctx context.Context) (*kzg.PlonkVerifier, error) {
+	client, err := ethclient.DialContext(ctx, DevChain)
+	if err != nil {
+		return nil, err
+	}
+
+	bi, err := bank.NewBank(BankAddr, client)
+	if err != nil {
+		return nil, err
+	}
+	faddr, err := bi.Get(&bind.CallOpts{From: Base}, "mul")
+	if err != nil {
+		return nil, err
+	}
+	return kzg.NewPlonkVerifier(faddr, client)
+}
+
+func NewAddPlonk(ctx context.Context) (*kzg.PlonkVerifier, error) {
+	client, err := ethclient.DialContext(ctx, DevChain)
+	if err != nil {
+		return nil, err
+	}
+
+	bi, err := bank.NewBank(BankAddr, client)
+	if err != nil {
+		return nil, err
+	}
+	faddr, err := bi.Get(&bind.CallOpts{From: Base}, "add")
+	if err != nil {
+		return nil, err
+	}
+	return kzg.NewPlonkVerifier(faddr, client)
+}
+
+func NewEProof(ctx context.Context) (*eproof.EProof, error) {
+	client, err := ethclient.DialContext(ctx, DevChain)
+	if err != nil {
+		return nil, err
+	}
+
+	bi, err := bank.NewBank(BankAddr, client)
+	if err != nil {
+		return nil, err
+	}
+	faddr, err := bi.Get(&bind.CallOpts{From: Base}, "eproof")
+	if err != nil {
+		return nil, err
+	}
+	return eproof.NewEProof(faddr, client)
+}
+
+func NewEVerify(ctx context.Context) (*everify.EVerify, error) {
+	client, err := ethclient.DialContext(ctx, DevChain)
+	if err != nil {
+		return nil, err
+	}
+
+	bi, err := bank.NewBank(BankAddr, client)
+	if err != nil {
+		return nil, err
+	}
+	faddr, err := bi.Get(&bind.CallOpts{From: Base}, "everify")
+	if err != nil {
+		return nil, err
+	}
+	return everify.NewEVerify(faddr, client)
 }
 
 func NewGPU(ctx context.Context) (*gpu.Gpu, error) {
@@ -196,21 +302,4 @@ func NewSpace(ctx context.Context) (*space.Space, error) {
 		return nil, err
 	}
 	return space.NewSpace(aaddr, client)
-}
-
-func NewBLS(ctx context.Context) (*bls.BLS, error) {
-	client, err := ethclient.DialContext(ctx, DevChain)
-	if err != nil {
-		return nil, err
-	}
-
-	bi, err := bank.NewBank(BankAddr, client)
-	if err != nil {
-		return nil, err
-	}
-	aaddr, err := bi.Get(&bind.CallOpts{From: Base}, "bls")
-	if err != nil {
-		return nil, err
-	}
-	return bls.NewBLS(aaddr, client)
 }

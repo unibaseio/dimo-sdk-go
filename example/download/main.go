@@ -5,15 +5,16 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"log"
 	"math/big"
 	"os"
 	"path"
 	"path/filepath"
 	"time"
 
-	cacheStore "github.com/MOSSV2/dimo-sdk-go/lib/cachestore"
 	"github.com/MOSSV2/dimo-sdk-go/lib/key"
 	"github.com/MOSSV2/dimo-sdk-go/lib/kv"
+	"github.com/MOSSV2/dimo-sdk-go/lib/piece"
 	"github.com/MOSSV2/dimo-sdk-go/lib/simplefs"
 	"github.com/MOSSV2/dimo-sdk-go/sdk"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -24,7 +25,7 @@ func main() {
 	skstr := flag.String("sk", "", "private key for sending transaction")
 	namestr := flag.String("name", "", "file or model name to download")
 	pathstr := flag.String("path", "", "dir or file path to save")
-	mf := flag.Bool("model", false, "download model or regular file")
+	mf := flag.Bool("model", false, "download type: model or regular file")
 	flag.Parse()
 
 	sk, err := crypto.HexToECDSA(*skstr)
@@ -45,18 +46,18 @@ func main() {
 	if *mf {
 		err = DownloadModel(sk, *namestr, fp)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 		}
 	} else {
 		err = DownloadFile(sk, *namestr, fp)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 		}
 	}
 }
 
 func DownloadFile(sk *ecdsa.PrivateKey, fname, fp string) error {
-	au, err := key.BuildAuth(sk, []byte("upload"))
+	au, err := key.BuildAuth(sk, []byte("download"))
 	if err != nil {
 		return err
 	}
@@ -79,7 +80,7 @@ func DownloadFile(sk *ecdsa.PrivateKey, fname, fp string) error {
 	if err == nil {
 		if finfo.IsDir() {
 			fp = filepath.Join(fp, fname)
-			fmt.Println("will save file to: ", fp)
+			log.Println("will save file to: ", fp)
 		} else {
 			fmt.Printf("overwrite %s? \n", fp)
 			fmt.Printf("please input 'yes' to continue: ")
@@ -106,7 +107,7 @@ func DownloadFile(sk *ecdsa.PrivateKey, fname, fp string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("download %s to: %s\n", fname, fp)
+		log.Printf("download %s to: %s\n", fname, fp)
 		return nil
 	}
 
@@ -115,7 +116,7 @@ func DownloadFile(sk *ecdsa.PrivateKey, fname, fp string) error {
 		return err
 	}
 
-	fmt.Printf("use local dir '%s' as cache\n", cachedir)
+	log.Printf("use local dir '%s' as cache\n", cachedir)
 	defer os.RemoveAll(cachedir)
 
 	ds, err := kv.NewBadgerStore(path.Join(cachedir, "meta"), nil)
@@ -127,10 +128,7 @@ func DownloadFile(sk *ecdsa.PrivateKey, fname, fp string) error {
 		return err
 	}
 
-	ks, err := cacheStore.New(au.Addr, ds, fs)
-	if err != nil {
-		return err
-	}
+	ks := piece.New(ds, fs)
 
 	// download 8 in parallel
 	err = sdk.DownloadParallel(sdk.ServerURL, au, fp, 8, ks, fi)
@@ -138,7 +136,7 @@ func DownloadFile(sk *ecdsa.PrivateKey, fname, fp string) error {
 		return err
 	}
 
-	fmt.Printf("download %s to: %s\n", fname, fp)
+	log.Printf("download %s to: %s\n", fname, fp)
 	return nil
 }
 
@@ -176,7 +174,7 @@ func DownloadModel(sk *ecdsa.PrivateKey, name, fp string) error {
 		return err
 	}
 
-	fmt.Printf("use local dir '%s' as cache\n", cachedir)
+	log.Printf("use local dir '%s' as cache\n", cachedir)
 	defer os.RemoveAll(cachedir)
 
 	ds, err := kv.NewBadgerStore(path.Join(cachedir, "meta"), nil)
@@ -188,10 +186,7 @@ func DownloadModel(sk *ecdsa.PrivateKey, name, fp string) error {
 		return err
 	}
 
-	ks, err := cacheStore.New(au.Addr, ds, fs)
-	if err != nil {
-		return err
-	}
+	ks := piece.New(ds, fs)
 
 	mrm, err := sdk.GetModel(sdk.ServerURL, au, name)
 	if err != nil {
@@ -202,6 +197,6 @@ func DownloadModel(sk *ecdsa.PrivateKey, name, fp string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("download model %s to dir: %s\n", name, fp)
+	log.Printf("download model %s to dir: %s\n", name, fp)
 	return nil
 }
