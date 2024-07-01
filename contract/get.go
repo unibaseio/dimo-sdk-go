@@ -354,12 +354,6 @@ func GetRevenue(addr common.Address, typ string) (*big.Int, error) {
 
 		res.Set(si.Avail)
 		return res, nil
-	case "gpu":
-		gi, err := NewGPU(ctx)
-		if err != nil {
-			return res, err
-		}
-		return gi.BalanceOf(&bind.CallOpts{From: addr}, addr)
 	case "space":
 		si, err := NewSpace(ctx)
 		if err != nil {
@@ -399,26 +393,6 @@ func GetGPUOwner(_gi uint64) (common.Address, error) {
 		return common.Address{}, err
 	}
 	return gi.GetOwner(&bind.CallOpts{From: Base}, _gi)
-}
-
-func GetGPUSetting() (*big.Int, [32]byte, error) {
-	ctx, cancle := context.WithTimeout(context.TODO(), 5*time.Second)
-	defer cancle()
-	gi, err := NewGPU(ctx)
-	if err != nil {
-		return nil, [32]byte{}, err
-	}
-
-	dif, err := gi.Difficulty(&bind.CallOpts{From: Base})
-	if err != nil {
-		return nil, [32]byte{}, err
-	}
-
-	seed, err := gi.Seed(&bind.CallOpts{From: Base})
-	if err != nil {
-		return nil, [32]byte{}, err
-	}
-	return dif, seed, nil
 }
 
 func GetModelIndex(_mn string) (uint64, error) {

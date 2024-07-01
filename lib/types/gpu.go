@@ -7,30 +7,12 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
-type GPUDetail struct {
+type GPUMeta struct {
+	Name   string
+	Serial uint64
+	Owner  common.Address
 	Type   string
 	Memory string
-}
-
-type GPUCore struct {
-	GPUDetail
-	Name  string
-	Owner common.Address
-}
-
-func (mm *GPUCore) Serialize() ([]byte, error) {
-	return cbor.Marshal(mm)
-}
-
-func (mm *GPUCore) Deserialize(b []byte) error {
-	return cbor.Unmarshal(b, mm)
-}
-
-type GPUMeta struct {
-	GPUCore
-	OnChain bool
-	Active  bool
-	InUse   bool
 }
 
 func (gm *GPUMeta) Serialize() ([]byte, error) {
@@ -42,7 +24,7 @@ func (gm *GPUMeta) Deserialize(b []byte) error {
 }
 
 type IGPU interface {
-	Submit(ctx context.Context, addr common.Address, gc GPUCore) (GPUMeta, error)
+	Submit(ctx context.Context, addr common.Address, gc GPUMeta) (GPUMeta, error)
 	Get(ctx context.Context, gn string) (GPUMeta, error)
 	List(ctx context.Context, addr common.Address, opt Options) ([]GPUMeta, error)
 }

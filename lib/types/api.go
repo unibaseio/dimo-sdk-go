@@ -22,12 +22,10 @@ type Auth struct {
 
 type ModelResult struct {
 	ModelMeta
-	IsPaid bool
 }
 
 type SpaceResult struct {
 	SpaceMeta
-	IsPaid bool
 }
 
 type ListModelResult struct {

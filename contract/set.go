@@ -3,7 +3,6 @@ package contract
 import (
 	"context"
 	"crypto/ecdsa"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -934,10 +933,10 @@ func AddModel(sk *ecdsa.PrivateKey, mc types.ModelMeta) error {
 		return err
 	}
 
-	var cnt [32]byte
-	binary.BigEndian.PutUint64(cnt[24:32], uint64(mc.Count))
+	var _rt [32]byte
+	copy(_rt[:], rt)
 
-	tx, err := mi.Add(au, mc.Name, rt, cnt)
+	tx, err := mi.Add(au, mc.Name, _rt)
 	if err != nil {
 		return err
 	}
@@ -1061,12 +1060,7 @@ func ActivateSpace(sk *ecdsa.PrivateKey, sn, root string, pfbyte []byte) error {
 		return err
 	}
 
-	_rt, err := hex.DecodeString(root)
-	if err != nil {
-		return err
-	}
-
-	tx, err := si.Activate(au, _ai, _rt, pfbyte)
+	tx, err := si.Activate(au, _ai)
 	if err != nil {
 		return err
 	}
@@ -1103,46 +1097,4 @@ func ShutdownSpace(sk *ecdsa.PrivateKey, _ai uint64) error {
 	}
 
 	return nil
-}
-
-func GPUCheck(sk *ecdsa.PrivateKey) error {
-	ctx, cancle := context.WithTimeout(context.TODO(), 3*time.Minute)
-	defer cancle()
-	gi, err := NewGPU(ctx)
-	if err != nil {
-		return err
-	}
-
-	au, err := makeAuth(big.NewInt(int64(DevChainID)), sk)
-	if err != nil {
-		return err
-	}
-
-	tx, err := gi.Check(au)
-	if err != nil {
-		return err
-	}
-
-	return CheckTx(DevChain, tx.Hash())
-}
-
-func GPUMint(sk *ecdsa.PrivateKey, _gi uint64, _salt []byte) error {
-	ctx, cancle := context.WithTimeout(context.TODO(), 3*time.Minute)
-	defer cancle()
-	gi, err := NewGPU(ctx)
-	if err != nil {
-		return err
-	}
-
-	au, err := makeAuth(big.NewInt(int64(DevChainID)), sk)
-	if err != nil {
-		return err
-	}
-
-	tx, err := gi.Mint(au, _gi, _salt)
-	if err != nil {
-		return err
-	}
-
-	return CheckTx(DevChain, tx.Hash())
 }

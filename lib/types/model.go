@@ -4,37 +4,20 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/fxamacker/cbor/v2"
 )
 
-type ModelCore struct {
+type ModelMeta struct {
 	Name     string
 	Size     uint64
+	Serial   uint64
+	Owner    common.Address
 	Creation time.Time
-}
-
-func (mm *ModelCore) Serialize() ([]byte, error) {
-	return cbor.Marshal(mm)
-}
-
-func (mm *ModelCore) Deserialize(b []byte) error {
-	return cbor.Unmarshal(b, mm)
-}
-
-type ModelMeta struct {
-	ModelCore
-	OnChain bool
-	Score   uint64
-	Price   *big.Int
-	Owner   common.Address
-	Type    string // stable-diffusion or others
-	Hash    string
-	Count   int
-	Files   map[string]string // name->content; if content is sha256, download it or put it
+	Hash     string
+	Files    map[string]string // name->content; if content is sha256, download it or put it
 }
 
 func (mmr *ModelMeta) Serialize() ([]byte, error) {

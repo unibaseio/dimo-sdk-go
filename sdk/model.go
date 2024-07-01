@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
-	"math/big"
 	"net/url"
 	"os"
 	"path"
@@ -139,9 +138,7 @@ func GetModel(baseUrl string, auth types.Auth, modelName string) (types.ModelRes
 
 func ListLocalDir(d string) (types.ModelMeta, error) {
 	mrm := types.ModelMeta{
-		ModelCore: types.ModelCore{
-			Name: path.Base(d),
-		},
+		Name: path.Base(d),
 	}
 
 	dst := path.Join(d, archive.ShadowTar)
@@ -160,7 +157,6 @@ func ListLocalDir(d string) (types.ModelMeta, error) {
 	}
 	mrm.Files = res
 	mrm.Size = size
-	mrm.Price = big.NewInt(int64(size))
 
 	logger.Debug("files: ", mrm.Files)
 
@@ -200,7 +196,7 @@ func UploadModelFiles(url string, sk *ecdsa.PrivateKey, au types.Auth, fp string
 			}
 		}
 
-		logger.Debug("uploaded %s to %s, sha256: %s\n", sfp, streamer, fr.Hash)
+		logger.Debugf("uploaded %s to %s, sha256: %s\n", sfp, streamer, fr.Hash)
 		if k == archive.ShadowTar {
 			os.Remove(sfp)
 		}
