@@ -21,10 +21,12 @@ import (
 
 func TestTransfer(t *testing.T) {
 	sk, addr := makeAccount()
-	val := big.NewInt(1e18)
-	val.Mul(val, big.NewInt(100000))
+	valt := big.NewInt(1e18)
+	valt.Mul(valt, big.NewInt(100000))
+
+	val := big.NewInt(1e14)
 	addr = common.HexToAddress("0x63CE1e0bCD89fa941556974f759425b40E4e7B11")
-	err := transfer(addr, val)
+	err := transfer(addr, val, valt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,8 +35,9 @@ func TestTransfer(t *testing.T) {
 
 func TestReward(t *testing.T) {
 	sk, addr := makeAccount()
-	val := big.NewInt(1e18)
-	err := transfer(addr, val)
+	valt := big.NewInt(1e18)
+	val := big.NewInt(1e14)
+	err := transfer(addr, val, valt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +97,7 @@ func TestNodeCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	psk, paddr := makeAccount()
-	err = transfer(paddr, big.NewInt(2e18))
+	err = transfer(paddr, big.NewInt(1e14), big.NewInt(2e18))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +176,7 @@ func TestCheck(t *testing.T) {
 	}
 }
 
-func transfer(to common.Address, val *big.Int) error {
+func transfer(to common.Address, val, valt *big.Int) error {
 	skbyte, err := os.ReadFile("/tmp/sk")
 	if err != nil {
 		return err
@@ -183,11 +186,11 @@ func transfer(to common.Address, val *big.Int) error {
 	if err != nil {
 		return err
 	}
-	err = Transfer(DevChain, privateKey, to, big.NewInt(1e15))
+	err = Transfer(DevChain, privateKey, to, val)
 	if err != nil {
 		return err
 	}
-	return TransferToken(DevChain, privateKey, TokenAddr, to, val)
+	return TransferToken(DevChain, privateKey, TokenAddr, to, valt)
 }
 
 func makeAccount() (*ecdsa.PrivateKey, common.Address) {

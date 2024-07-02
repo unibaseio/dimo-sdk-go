@@ -35,22 +35,21 @@ const (
 )
 
 var (
-	DevChain   = "http://54.254.72.127:8501"
-	DevChainID = 222
-	//DevChain     = "http://unibase-sepolia-2052362516.ap-southeast-1.elb.amazonaws.com"
-	//DevChainID   = 42069
+	//DevChain   = "http://54.254.72.127:8501"
+	//DevChainID = 222
+	DevChain   = "http://unibase-sepolia-2052362516.ap-southeast-1.elb.amazonaws.com"
+	DevChainID = 42069
 	//http://unibasechain-scan-405529765.ap-southeast-1.elb.amazonaws.com/
 
 	DevBlockTime = 2 // seconds/block
-	SyncHeight   = 991_000
+	SyncHeight   = 28_000
 
-	// Epoch = 5760 blocks; 7.5 epoch/day; should be less
 	DefaultGasLimit = 8_000_000
 	DefaultGasPrice = 10
 
 	DefaultStreamPrice  = 1e12
 	DefaultReplicaPrice = 1e11 // 1TB*100 epoch cost 10
-	DefaultStoreEpoch   = 101  // slight larger than minEpoch
+	DefaultStoreEpoch   = 301  // slight larger than minEpoch
 	DelaySubmit         = 7
 
 	DefaultSpacePrice = 1e10
@@ -58,12 +57,12 @@ var (
 
 	DefaultPenalty = 1e18
 
-	L1Bridge = common.HexToAddress("0x6C0192A83005b0a7c9Daf0b8631b9A01D779967e")
+	L1Bridge = common.HexToAddress("0x07EFc706EaFD6AE3b31fc0ba796F9C37A4510B9b")
 
 	Base = common.HexToAddress("0x61Ea24745A3F7Bcbb67eD95B674fEcfbb331ABd0")
 
-	BankAddr  = common.HexToAddress("0xDA976D1B21103f847ABCd7f644E84d45203A5C5F")
-	TokenAddr = common.HexToAddress("0x6c579D5eF7846E2c6cE255Adc2E0BEF1411fEB5c")
+	BankAddr  = common.HexToAddress("0x221E94E910Ce182E1A8d71ffEABFB991B822aAe4")
+	TokenAddr = common.HexToAddress("0xAb2505D73472964a36359635E43449FEC0D90BA0")
 )
 
 var logger = dlog.Logger("contract")

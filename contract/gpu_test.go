@@ -13,7 +13,7 @@ import (
 
 func TestGPU(t *testing.T) {
 	sk, addr := makeAccount()
-	err := transfer(addr, big.NewInt(1e18))
+	err := transfer(addr, big.NewInt(1e14), big.NewInt(1e18))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestGPU(t *testing.T) {
 
 func TestModel(t *testing.T) {
 	sk, addr := makeAccount()
-	err := transfer(addr, big.NewInt(1e18))
+	err := transfer(addr, big.NewInt(1e14), big.NewInt(1e18))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestModel(t *testing.T) {
 
 func TestSpace(t *testing.T) {
 	sk, addr := makeAccount()
-	err := transfer(addr, big.NewInt(9e18))
+	err := transfer(addr, big.NewInt(1e14), big.NewInt(9e18))
 	if err != nil {
 		t.Fatal(err)
 	}

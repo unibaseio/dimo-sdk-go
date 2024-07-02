@@ -69,7 +69,6 @@ func Upload(baseUrl string, auth types.Auth, policy types.Policy, filePath strin
 
 		if name != "" {
 			fr.Name = name
-			//fr.OnlyPiece = true
 		}
 
 		logger.Debug("upload meta: ", filePath, " to: ", baseUrl)
