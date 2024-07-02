@@ -41,7 +41,7 @@ func Set(sk *ecdsa.PrivateKey, _typ string, ca common.Address) error {
 	return nil
 }
 
-func GetEpoch(sk *ecdsa.PrivateKey) (uint64, error) {
+func CheckEpoch(sk *ecdsa.PrivateKey) (uint64, error) {
 	ctx, cancle := context.WithTimeout(context.TODO(), 1*time.Minute)
 	defer cancle()
 	ei, err := NewEpoch(ctx)
@@ -135,24 +135,15 @@ func AddPiece(sk *ecdsa.PrivateKey, pc types.PieceCore) error {
 	logger.Debug("add piece: ", pc)
 	ctx, cancle := context.WithTimeout(context.TODO(), 3*time.Minute)
 	defer cancle()
-	fi, err := NewPiece(ctx)
-	if err != nil {
-		return err
-	}
 
-	au, err := makeAuth(big.NewInt(int64(DevChainID)), sk)
-	if err != nil {
-		return err
-	}
-
-	ce, err := GetEpoch(sk)
+	ce, err := CheckEpoch(sk)
 	if err != nil {
 		return err
 	}
 
 	if pc.Expire == 0 {
 		pc.Start = ce
-		pc.Expire = ce + uint64(DefaultStoreEpoch) + 1
+		pc.Expire = ce + uint64(DefaultStoreEpoch)
 	}
 	if pc.Price == nil {
 		pc.Price = big.NewInt(int64(DefaultReplicaPrice))
@@ -166,6 +157,11 @@ func AddPiece(sk *ecdsa.PrivateKey, pc types.PieceCore) error {
 	val.Add(val, big.NewInt(int64(DefaultStreamPrice)))
 	val.Mul(val, big.NewInt(int64(pc.Policy.N)))
 
+	au, err := makeAuth(big.NewInt(int64(DevChainID)), sk)
+	if err != nil {
+		return err
+	}
+
 	ti, err := NewToken(ctx)
 	if err != nil {
 		return err
@@ -176,6 +172,11 @@ func AddPiece(sk *ecdsa.PrivateKey, pc types.PieceCore) error {
 		return err
 	}
 	err = CheckTx(DevChain, tx.Hash())
+	if err != nil {
+		return err
+	}
+
+	fi, err := NewPiece(ctx)
 	if err != nil {
 		return err
 	}
@@ -1007,7 +1008,7 @@ func AddSpace(sk *ecdsa.PrivateKey, msm types.SpaceMeta) error {
 		return err
 	}
 
-	ce, err := GetEpoch(sk)
+	ce, err := CheckEpoch(sk)
 	if err != nil {
 		return err
 	}

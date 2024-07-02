@@ -44,7 +44,7 @@ var (
 	DevBlockTime = 2 // seconds/block
 	SyncHeight   = 28_000
 
-	DefaultGasLimit = 8_000_000
+	DefaultGasLimit = 1_000_000
 	DefaultGasPrice = 10
 
 	DefaultStreamPrice  = 1e12

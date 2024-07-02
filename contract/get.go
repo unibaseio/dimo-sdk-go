@@ -96,6 +96,18 @@ func Choose(addr common.Address, seed [32]byte, count, pcnt uint64, index uint64
 	return pcnt
 }
 
+func GetEpoch() (uint64, error) {
+	ctx, cancle := context.WithTimeout(context.TODO(), 5*time.Second)
+	defer cancle()
+
+	ei, err := NewEpoch(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	return ei.Current(&bind.CallOpts{From: Base})
+}
+
 func GetEpochInfo(_epoch uint64) (*big.Int, [32]byte, error) {
 	ctx, cancle := context.WithTimeout(context.TODO(), 5*time.Second)
 	defer cancle()
@@ -433,4 +445,23 @@ func GetSpaceInfo(_mi uint64) (space.ISpaceInfo, error) {
 		return space.ISpaceInfo{}, err
 	}
 	return si.GetSpace(&bind.CallOpts{From: Base}, _mi)
+}
+
+func CheckBalance(addr common.Address) error {
+	val := BalanceOf(DevChain, addr)
+	if val.Cmp(big.NewInt(0)) == 0 {
+		return fmt.Errorf("not has gas token")
+	}
+
+	val = BalanceOfToken(addr)
+	retry := 10
+	for retry > 0 {
+		if val.Cmp(big.NewInt(0)) > 0 {
+			return nil
+		}
+		time.Sleep(30 * time.Second)
+		val = BalanceOfToken(addr)
+		retry--
+	}
+	return fmt.Errorf("not has erc20 token")
 }
