@@ -450,7 +450,11 @@ func GetSpaceInfo(_mi uint64) (space.ISpaceInfo, error) {
 func CheckBalance(addr common.Address) error {
 	val := BalanceOf(DevChain, addr)
 	if val.Cmp(big.NewInt(0)) == 0 {
-		return fmt.Errorf("not has gas token")
+		time.Sleep(30 * time.Second)
+		val = BalanceOf(DevChain, addr)
+		if val.Cmp(big.NewInt(0)) == 0 {
+			return fmt.Errorf("not has gas token")
+		}
 	}
 
 	val = BalanceOfToken(addr)
