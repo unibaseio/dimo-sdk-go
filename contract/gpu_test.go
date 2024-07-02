@@ -1,7 +1,6 @@
 package contract
 
 import (
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -10,18 +9,11 @@ import (
 
 	"github.com/MOSSV2/dimo-sdk-go/lib/types"
 	"github.com/MOSSV2/dimo-sdk-go/lib/utils"
-
-	"github.com/ethereum/go-ethereum/crypto"
 )
 
 func TestGPU(t *testing.T) {
 	sk, addr := makeAccount()
-	err := transfer(addr, big.NewInt(1e18))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = GPUCheck(sk)
+	err := transfer(addr, big.NewInt(1e14), big.NewInt(1e18))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,29 +41,6 @@ func TestGPU(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	target, seed, err := GetGPUSetting()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	salt := make([]byte, 32)
-	nt := time.Now()
-	for i := 0; ; i++ {
-		binary.BigEndian.PutUint64(salt[24:], uint64(i))
-		val := crypto.Keccak256(seed[:], []byte(ginfo.Name), salt)
-		if new(big.Int).SetBytes(val).Cmp(target) <= 0 {
-			break
-		}
-		if i%100 == 0 {
-			t.Log(i)
-		}
-	}
-	t.Log(time.Since(nt))
-	err = GPUMint(sk, _gi, salt)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	_ginfo, err := GetGPUInfo(_gi)
 	if err != nil {
 		t.Fatal(err)
@@ -81,17 +50,14 @@ func TestGPU(t *testing.T) {
 
 func TestModel(t *testing.T) {
 	sk, addr := makeAccount()
-	err := transfer(addr, big.NewInt(1e18))
+	err := transfer(addr, big.NewInt(1e14), big.NewInt(1e18))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	mc := types.ModelMeta{
-		ModelCore: types.ModelCore{
-			Name: "model-test",
-		},
-		Count: 100,
-		Hash:  hex.EncodeToString([]byte("test")),
+		Name: "model-test",
+		Hash: hex.EncodeToString([]byte("test")),
 	}
 
 	_mi, err := GetModelIndex(mc.Name)
@@ -117,7 +83,7 @@ func TestModel(t *testing.T) {
 
 func TestSpace(t *testing.T) {
 	sk, addr := makeAccount()
-	err := transfer(addr, big.NewInt(9e18))
+	err := transfer(addr, big.NewInt(1e14), big.NewInt(9e18))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,15 +100,9 @@ func TestSpace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	minfo, err := GetModelInfo(0)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	mc := types.SpaceMeta{
-		Name:  "space-" + time.Now().Format(time.RFC3339),
-		Model: minfo.Name,
-		GPU:   _gn,
+		Name: "space-" + time.Now().Format(time.RFC3339),
+		GPU:  _gn,
 	}
 
 	_ai, err := GetSpaceIndex(mc.Name)

@@ -96,6 +96,18 @@ func Choose(addr common.Address, seed [32]byte, count, pcnt uint64, index uint64
 	return pcnt
 }
 
+func GetEpoch() (uint64, error) {
+	ctx, cancle := context.WithTimeout(context.TODO(), 5*time.Second)
+	defer cancle()
+
+	ei, err := NewEpoch(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	return ei.Current(&bind.CallOpts{From: Base})
+}
+
 func GetEpochInfo(_epoch uint64) (*big.Int, [32]byte, error) {
 	ctx, cancle := context.WithTimeout(context.TODO(), 5*time.Second)
 	defer cancle()
@@ -354,12 +366,6 @@ func GetRevenue(addr common.Address, typ string) (*big.Int, error) {
 
 		res.Set(si.Avail)
 		return res, nil
-	case "gpu":
-		gi, err := NewGPU(ctx)
-		if err != nil {
-			return res, err
-		}
-		return gi.BalanceOf(&bind.CallOpts{From: addr}, addr)
 	case "space":
 		si, err := NewSpace(ctx)
 		if err != nil {
@@ -401,26 +407,6 @@ func GetGPUOwner(_gi uint64) (common.Address, error) {
 	return gi.GetOwner(&bind.CallOpts{From: Base}, _gi)
 }
 
-func GetGPUSetting() (*big.Int, [32]byte, error) {
-	ctx, cancle := context.WithTimeout(context.TODO(), 5*time.Second)
-	defer cancle()
-	gi, err := NewGPU(ctx)
-	if err != nil {
-		return nil, [32]byte{}, err
-	}
-
-	dif, err := gi.Difficulty(&bind.CallOpts{From: Base})
-	if err != nil {
-		return nil, [32]byte{}, err
-	}
-
-	seed, err := gi.Seed(&bind.CallOpts{From: Base})
-	if err != nil {
-		return nil, [32]byte{}, err
-	}
-	return dif, seed, nil
-}
-
 func GetModelIndex(_mn string) (uint64, error) {
 	ctx, cancle := context.WithTimeout(context.TODO(), 5*time.Second)
 	defer cancle()
@@ -459,4 +445,23 @@ func GetSpaceInfo(_mi uint64) (space.ISpaceInfo, error) {
 		return space.ISpaceInfo{}, err
 	}
 	return si.GetSpace(&bind.CallOpts{From: Base}, _mi)
+}
+
+func CheckBalance(addr common.Address) error {
+	val := BalanceOf(DevChain, addr)
+	if val.Cmp(big.NewInt(0)) == 0 {
+		return fmt.Errorf("not has gas token")
+	}
+
+	val = BalanceOfToken(addr)
+	retry := 10
+	for retry > 0 {
+		if val.Cmp(big.NewInt(0)) > 0 {
+			return nil
+		}
+		time.Sleep(30 * time.Second)
+		val = BalanceOfToken(addr)
+		retry--
+	}
+	return fmt.Errorf("not has erc20 token")
 }

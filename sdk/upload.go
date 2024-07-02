@@ -64,11 +64,11 @@ func Upload(baseUrl string, auth types.Auth, policy types.Policy, filePath strin
 			if strings.Contains(err.Error(), "already has") {
 				return res, em.Name, err
 			}
+			continue
 		}
 
 		if name != "" {
 			fr.Name = name
-			//fr.OnlyPiece = true
 		}
 
 		logger.Debug("upload meta: ", filePath, " to: ", baseUrl)

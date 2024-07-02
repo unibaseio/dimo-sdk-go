@@ -10,9 +10,9 @@ import (
 )
 
 type SpaceStat struct {
-	OnChain bool
-	Stat    uint8     // 0 init, 1. active
-	Last    time.Time // heartbeat
+	Serial uint64
+	Stat   uint8     // 0 init, 1. active
+	Last   time.Time // heartbeat
 }
 
 type SpaceMeta struct {

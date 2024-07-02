@@ -44,23 +44,6 @@ func Login(baseUrl string, auth types.Auth) error {
 	return nil
 }
 
-func BalanceOf(baseUrl string, auth types.Auth) (types.AccountResult, error) {
-	re := types.AccountResult{}
-
-	res, err := doRequest(context.TODO(), baseUrl, "/api/balanceOf", auth, nil)
-	if err != nil {
-		return re, err
-	}
-
-	err = json.Unmarshal(res, &re)
-	if err != nil {
-		return re, err
-	}
-
-	logger.Debugf("%s has balance: %d", auth.Addr, re.Value)
-	return re, nil
-}
-
 func GetChal(baseUrl string) (types.ChalResult, error) {
 	var res types.ChalResult
 	resp, err := http.Get(baseUrl + "/api/chal")

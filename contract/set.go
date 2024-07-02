@@ -3,7 +3,6 @@ package contract
 import (
 	"context"
 	"crypto/ecdsa"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -42,7 +41,7 @@ func Set(sk *ecdsa.PrivateKey, _typ string, ca common.Address) error {
 	return nil
 }
 
-func GetEpoch(sk *ecdsa.PrivateKey) (uint64, error) {
+func CheckEpoch(sk *ecdsa.PrivateKey) (uint64, error) {
 	ctx, cancle := context.WithTimeout(context.TODO(), 1*time.Minute)
 	defer cancle()
 	ei, err := NewEpoch(ctx)
@@ -136,24 +135,15 @@ func AddPiece(sk *ecdsa.PrivateKey, pc types.PieceCore) error {
 	logger.Debug("add piece: ", pc)
 	ctx, cancle := context.WithTimeout(context.TODO(), 3*time.Minute)
 	defer cancle()
-	fi, err := NewPiece(ctx)
-	if err != nil {
-		return err
-	}
 
-	au, err := makeAuth(big.NewInt(int64(DevChainID)), sk)
-	if err != nil {
-		return err
-	}
-
-	ce, err := GetEpoch(sk)
+	ce, err := CheckEpoch(sk)
 	if err != nil {
 		return err
 	}
 
 	if pc.Expire == 0 {
 		pc.Start = ce
-		pc.Expire = ce + uint64(DefaultStoreEpoch) + 1
+		pc.Expire = ce + uint64(DefaultStoreEpoch)
 	}
 	if pc.Price == nil {
 		pc.Price = big.NewInt(int64(DefaultReplicaPrice))
@@ -167,6 +157,11 @@ func AddPiece(sk *ecdsa.PrivateKey, pc types.PieceCore) error {
 	val.Add(val, big.NewInt(int64(DefaultStreamPrice)))
 	val.Mul(val, big.NewInt(int64(pc.Policy.N)))
 
+	au, err := makeAuth(big.NewInt(int64(DevChainID)), sk)
+	if err != nil {
+		return err
+	}
+
 	ti, err := NewToken(ctx)
 	if err != nil {
 		return err
@@ -177,6 +172,11 @@ func AddPiece(sk *ecdsa.PrivateKey, pc types.PieceCore) error {
 		return err
 	}
 	err = CheckTx(DevChain, tx.Hash())
+	if err != nil {
+		return err
+	}
+
+	fi, err := NewPiece(ctx)
 	if err != nil {
 		return err
 	}
@@ -934,10 +934,10 @@ func AddModel(sk *ecdsa.PrivateKey, mc types.ModelMeta) error {
 		return err
 	}
 
-	var cnt [32]byte
-	binary.BigEndian.PutUint64(cnt[24:32], uint64(mc.Count))
+	var _rt [32]byte
+	copy(_rt[:], rt)
 
-	tx, err := mi.Add(au, mc.Name, rt, cnt)
+	tx, err := mi.Add(au, mc.Name, _rt)
 	if err != nil {
 		return err
 	}
@@ -1008,7 +1008,7 @@ func AddSpace(sk *ecdsa.PrivateKey, msm types.SpaceMeta) error {
 		return err
 	}
 
-	ce, err := GetEpoch(sk)
+	ce, err := CheckEpoch(sk)
 	if err != nil {
 		return err
 	}
@@ -1061,12 +1061,7 @@ func ActivateSpace(sk *ecdsa.PrivateKey, sn, root string, pfbyte []byte) error {
 		return err
 	}
 
-	_rt, err := hex.DecodeString(root)
-	if err != nil {
-		return err
-	}
-
-	tx, err := si.Activate(au, _ai, _rt, pfbyte)
+	tx, err := si.Activate(au, _ai)
 	if err != nil {
 		return err
 	}
@@ -1103,46 +1098,4 @@ func ShutdownSpace(sk *ecdsa.PrivateKey, _ai uint64) error {
 	}
 
 	return nil
-}
-
-func GPUCheck(sk *ecdsa.PrivateKey) error {
-	ctx, cancle := context.WithTimeout(context.TODO(), 3*time.Minute)
-	defer cancle()
-	gi, err := NewGPU(ctx)
-	if err != nil {
-		return err
-	}
-
-	au, err := makeAuth(big.NewInt(int64(DevChainID)), sk)
-	if err != nil {
-		return err
-	}
-
-	tx, err := gi.Check(au)
-	if err != nil {
-		return err
-	}
-
-	return CheckTx(DevChain, tx.Hash())
-}
-
-func GPUMint(sk *ecdsa.PrivateKey, _gi uint64, _salt []byte) error {
-	ctx, cancle := context.WithTimeout(context.TODO(), 3*time.Minute)
-	defer cancle()
-	gi, err := NewGPU(ctx)
-	if err != nil {
-		return err
-	}
-
-	au, err := makeAuth(big.NewInt(int64(DevChainID)), sk)
-	if err != nil {
-		return err
-	}
-
-	tx, err := gi.Mint(au, _gi, _salt)
-	if err != nil {
-		return err
-	}
-
-	return CheckTx(DevChain, tx.Hash())
 }

@@ -6,12 +6,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math/big"
 	"os"
 	"path"
 	"path/filepath"
-	"time"
 
+	"github.com/MOSSV2/dimo-sdk-go/contract"
 	"github.com/MOSSV2/dimo-sdk-go/lib/key"
 	"github.com/MOSSV2/dimo-sdk-go/lib/kv"
 	"github.com/MOSSV2/dimo-sdk-go/lib/piece"
@@ -64,16 +63,9 @@ func DownloadFile(sk *ecdsa.PrivateKey, fname, fp string) error {
 
 	sdk.Login(sdk.ServerURL, au)
 
-	ar, err := sdk.BalanceOf(sdk.ServerURL, au)
+	err = contract.CheckBalance(au.Addr)
 	if err != nil {
 		return err
-	}
-	for ar.Value.Cmp(big.NewInt(0)) == 0 {
-		time.Sleep(3 * time.Second)
-		ar, err = sdk.BalanceOf(sdk.ServerURL, au)
-		if err != nil {
-			return err
-		}
 	}
 
 	finfo, err := os.Stat(fp)
@@ -148,16 +140,9 @@ func DownloadModel(sk *ecdsa.PrivateKey, name, fp string) error {
 
 	sdk.Login(sdk.ServerURL, au)
 
-	ar, err := sdk.BalanceOf(sdk.ServerURL, au)
+	err = contract.CheckBalance(au.Addr)
 	if err != nil {
 		return err
-	}
-	for ar.Value.Cmp(big.NewInt(0)) == 0 {
-		time.Sleep(3 * time.Second)
-		ar, err = sdk.BalanceOf(sdk.ServerURL, au)
-		if err != nil {
-			return err
-		}
 	}
 
 	finfo, err := os.Stat(fp)

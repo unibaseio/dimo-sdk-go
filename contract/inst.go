@@ -253,7 +253,7 @@ func NewEVerify(ctx context.Context) (*everify.EVerify, error) {
 	return everify.NewEVerify(faddr, client)
 }
 
-func NewGPU(ctx context.Context) (*gpu.Gpu, error) {
+func NewGPU(ctx context.Context) (*gpu.GPU, error) {
 	client, err := ethclient.DialContext(ctx, DevChain)
 	if err != nil {
 		return nil, err
@@ -267,7 +267,7 @@ func NewGPU(ctx context.Context) (*gpu.Gpu, error) {
 	if err != nil {
 		return nil, err
 	}
-	return gpu.NewGpu(gaddr, client)
+	return gpu.NewGPU(gaddr, client)
 }
 
 func NewModel(ctx context.Context) (*model.Model, error) {
