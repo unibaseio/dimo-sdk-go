@@ -21,6 +21,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 func GetInstAddr(ctx context.Context, typ string) (common.Address, error) {
@@ -94,6 +95,16 @@ func Choose(addr common.Address, seed [32]byte, count, pcnt uint64, index uint64
 		return res.Uint64()
 	}
 	return pcnt
+}
+
+func GetBlockNumber() (uint64, error) {
+	client, err := ethclient.Dial(DevChain)
+	if err != nil {
+		return 0, err
+	}
+	ctx, cancle := context.WithTimeout(context.TODO(), 5*time.Second)
+	defer cancle()
+	return client.BlockNumber(ctx)
 }
 
 func GetEpoch() (uint64, error) {
