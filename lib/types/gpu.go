@@ -8,6 +8,12 @@ import (
 )
 
 type GPUMeta struct {
+	GPUCore
+	Active bool
+	InUse  bool
+}
+
+type GPUCore struct {
 	Name   string
 	Serial uint64
 	Owner  common.Address
@@ -15,16 +21,16 @@ type GPUMeta struct {
 	Memory string
 }
 
-func (gm *GPUMeta) Serialize() ([]byte, error) {
+func (gm *GPUCore) Serialize() ([]byte, error) {
 	return cbor.Marshal(gm)
 }
 
-func (gm *GPUMeta) Deserialize(b []byte) error {
+func (gm *GPUCore) Deserialize(b []byte) error {
 	return cbor.Unmarshal(b, gm)
 }
 
 type IGPU interface {
-	Submit(ctx context.Context, addr common.Address, gc GPUMeta) (GPUMeta, error)
+	Submit(ctx context.Context, addr common.Address, gc GPUCore) error
 	Get(ctx context.Context, gn string) (GPUMeta, error)
 	List(ctx context.Context, addr common.Address, opt Options) ([]GPUMeta, error)
 }

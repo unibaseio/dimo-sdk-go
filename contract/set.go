@@ -3,7 +3,6 @@ package contract
 import (
 	"context"
 	"crypto/ecdsa"
-	"encoding/hex"
 	"fmt"
 	"math/big"
 	"time"
@@ -929,7 +928,7 @@ func AddModel(sk *ecdsa.PrivateKey, mc types.ModelMeta) error {
 		return err
 	}
 
-	_rt, err := hex.DecodeString(mc.Hash)
+	_rt, err := G1StringInSolidity(mc.Hash)
 	if err != nil {
 		return err
 	}

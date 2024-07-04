@@ -22,10 +22,10 @@ import (
 func TestTransfer(t *testing.T) {
 	sk, addr := makeAccount()
 	valt := big.NewInt(1e18)
-	valt.Mul(valt, big.NewInt(100000))
+	valt.Mul(valt, big.NewInt(100))
 
-	val := big.NewInt(1e16)
-	addr = common.HexToAddress("0xd03E6fE1824917F1B42a07F0Baa9ac025DF8c984")
+	val := big.NewInt(1e15)
+	addr = common.HexToAddress("0x49c4726F9cbe863951d6Fec605D273D4A23b1B98")
 	err := transfer(addr, val, valt)
 	if err != nil {
 		t.Fatal(err)

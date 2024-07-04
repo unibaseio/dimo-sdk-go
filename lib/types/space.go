@@ -11,7 +11,7 @@ import (
 
 type SpaceStat struct {
 	Serial uint64
-	Stat   uint8     // 0 init, 1. active
+	Stat   uint8     // 1. init, 2. active, 3. stop
 	Last   time.Time // heartbeat
 }
 
