@@ -42,9 +42,10 @@ var (
 	//http://unibasechain-scan-405529765.ap-southeast-1.elb.amazonaws.com/
 
 	DevBlockTime = 2 // seconds/block
+	EpochBlocks  = 3600
 	SyncHeight   = 28_000
 
-	DefaultGasLimit = 1_000_000
+	DefaultGasLimit = 8_000_000
 	DefaultGasPrice = 10
 
 	DefaultStreamPrice  = 1e12
@@ -62,7 +63,7 @@ var (
 	Base = common.HexToAddress("0x61Ea24745A3F7Bcbb67eD95B674fEcfbb331ABd0")
 
 	BankAddr  = common.HexToAddress("0x221E94E910Ce182E1A8d71ffEABFB991B822aAe4")
-	TokenAddr = common.HexToAddress("0xAb2505D73472964a36359635E43449FEC0D90BA0")
+	TokenAddr = common.HexToAddress("0x793FBB43D82Af009748953f22DBCE31d89B624B7")
 )
 
 var logger = dlog.Logger("contract")

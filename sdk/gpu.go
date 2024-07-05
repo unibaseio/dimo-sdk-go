@@ -10,7 +10,7 @@ import (
 	"github.com/MOSSV2/dimo-sdk-go/lib/types"
 )
 
-func SubmitGPU(baseUrl string, auth types.Auth, mr types.GPUMeta) error {
+func SubmitGPU(baseUrl string, auth types.Auth, mr types.GPUCore) error {
 	mmb, err := json.Marshal(mr)
 	if err != nil {
 		return err
@@ -19,12 +19,7 @@ func SubmitGPU(baseUrl string, auth types.Auth, mr types.GPUMeta) error {
 	form := url.Values{}
 	form.Set("txMsg", hex.EncodeToString(mmb))
 
-	res, err := doRequest(context.TODO(), baseUrl, "/api/submitGPU", auth, strings.NewReader(form.Encode()))
-	if err != nil {
-		return err
-	}
-	re := new(types.GPUMeta)
-	err = json.Unmarshal(res, re)
+	_, err = doRequest(context.TODO(), baseUrl, "/api/submitGPU", auth, strings.NewReader(form.Encode()))
 	if err != nil {
 		return err
 	}

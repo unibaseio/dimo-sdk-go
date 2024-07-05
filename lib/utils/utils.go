@@ -117,8 +117,8 @@ func Disorder(array []interface{}) {
 	}
 }
 
-func GetGPUInfo(id string) (types.GPUMeta, error) {
-	res := types.GPUMeta{}
+func GetGPUInfo(id string) (types.GPUCore, error) {
+	res := types.GPUCore{}
 	cmd := exec.Command("nvidia-smi", "--query-gpu=name,uuid,memory.total", "--format=csv,noheader", "--id="+id)
 	out, err := cmd.CombinedOutput()
 	if err != nil {

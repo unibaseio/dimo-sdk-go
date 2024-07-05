@@ -3,7 +3,6 @@ package contract
 import (
 	"context"
 	"crypto/ecdsa"
-	"encoding/hex"
 	"fmt"
 	"math/big"
 	"time"
@@ -41,7 +40,7 @@ func Set(sk *ecdsa.PrivateKey, _typ string, ca common.Address) error {
 	return nil
 }
 
-func CheckEpoch(sk *ecdsa.PrivateKey) (uint64, error) {
+func UpdateEpoch(sk *ecdsa.PrivateKey) (uint64, error) {
 	ctx, cancle := context.WithTimeout(context.TODO(), 1*time.Minute)
 	defer cancle()
 	ei, err := NewEpoch(ctx)
@@ -79,18 +78,18 @@ func RegisterNode(sk *ecdsa.PrivateKey, _typ uint8, val *big.Int) error {
 		return err
 	}
 
-	_, err = ni.Check(&bind.CallOpts{From: au.From}, au.From, _typ)
-	if err == nil {
-		logger.Debugf("%s already pledge enough money in type %d", au.From, _typ)
-		return nil
-	}
-
 	ti, err := NewToken(ctx)
 	if err != nil {
 		return err
 	}
 
 	if val == nil {
+		_, err = ni.Check(&bind.CallOpts{From: au.From}, au.From, _typ)
+		if err == nil {
+			logger.Debugf("%s already pledge enough money in type %d", au.From, _typ)
+			return nil
+		}
+
 		pval, err := ni.GetMinPledge(&bind.CallOpts{From: au.From}, _typ)
 		if err != nil {
 			return err
@@ -136,7 +135,7 @@ func AddPiece(sk *ecdsa.PrivateKey, pc types.PieceCore) error {
 	ctx, cancle := context.WithTimeout(context.TODO(), 3*time.Minute)
 	defer cancle()
 
-	ce, err := CheckEpoch(sk)
+	ce, err := UpdateEpoch(sk)
 	if err != nil {
 		return err
 	}
@@ -929,13 +928,10 @@ func AddModel(sk *ecdsa.PrivateKey, mc types.ModelMeta) error {
 		return err
 	}
 
-	rt, err := hex.DecodeString(mc.Hash)
+	_rt, err := G1StringInSolidity(mc.Hash)
 	if err != nil {
 		return err
 	}
-
-	var _rt [32]byte
-	copy(_rt[:], rt)
 
 	tx, err := mi.Add(au, mc.Name, _rt)
 	if err != nil {
@@ -1008,7 +1004,7 @@ func AddSpace(sk *ecdsa.PrivateKey, msm types.SpaceMeta) error {
 		return err
 	}
 
-	ce, err := CheckEpoch(sk)
+	ce, err := UpdateEpoch(sk)
 	if err != nil {
 		return err
 	}

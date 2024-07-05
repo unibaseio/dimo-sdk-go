@@ -28,11 +28,6 @@ func (ppk *PointPublicKey) GenCommitment(slen int, d []byte) (types.ICommitment,
 		return nil, fmt.Errorf("invalid data shards %d: too large", len(shards))
 	}
 
-	if len(shards) < MinShard {
-		var fr Fr
-		shards = append(shards, fr)
-	}
-
 	srs := kzg.ProvingKey{
 		G1: ppk.G1L,
 	}

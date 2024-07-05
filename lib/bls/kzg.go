@@ -53,11 +53,6 @@ func (pk *PublicKey) GenCommitment(slen int, d []byte, offset int) (types.ICommi
 		return nil, fmt.Errorf("invalid data shards %d: too large", len(shards))
 	}
 
-	if len(shards) < MinShard {
-		var fr Fr
-		shards = append(shards, fr)
-	}
-
 	srs := kzg.ProvingKey{
 		G1: pk.Pk.G1[offset:],
 	}
