@@ -182,9 +182,9 @@ func HandleRSChallenge(elog etypes.Log, cabi abi.ABI) (types.RSChalInChain, erro
 func HandleRSFake(elog etypes.Log, cabi abi.ABI) (types.RSChalInChain, error) {
 	ei := types.RSChalInChain{}
 
-	evInfo, ok := cabi.Events["Fake"]
+	evInfo, ok := cabi.Events["Forge"]
 	if !ok {
-		return ei, fmt.Errorf("no event 'Fake' in ABI")
+		return ei, fmt.Errorf("no event 'Forge' in ABI")
 	}
 
 	if len(elog.Topics) != 2 {
@@ -350,5 +350,29 @@ func HandleEPProve(elog etypes.Log, cabi abi.ABI) (types.EPChalInChain, error) {
 		}
 	}
 
+	return ei, nil
+}
+
+func HandleEPFake(elog etypes.Log, cabi abi.ABI) (types.EPChalInChain, error) {
+	ei := types.EPChalInChain{}
+
+	evInfo, ok := cabi.Events["Fake"]
+	if !ok {
+		return ei, fmt.Errorf("no event 'Fake' in ABI")
+	}
+
+	if len(elog.Topics) != 2 {
+		return ei, fmt.Errorf("invalid log topic length")
+	}
+	ei.Store = common.HexToAddress(elog.Topics[1].Hex())
+
+	ld, err := cabi.Unpack(evInfo.Name, elog.Data)
+	if err != nil {
+		return ei, err
+	}
+	if len(ld) != 1 {
+		return ei, fmt.Errorf("invalid log data length")
+	}
+	ei.Epoch = ld[0].(uint64)
 	return ei, nil
 }
