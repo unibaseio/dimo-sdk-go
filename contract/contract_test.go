@@ -24,7 +24,7 @@ func TestTransfer(t *testing.T) {
 	valt.Mul(valt, big.NewInt(100))
 
 	val := big.NewInt(8e15)
-	addr = common.HexToAddress("0xCf2bF532aDBEd038B849416B2346633c57bcC3fe")
+	addr = common.HexToAddress("0xd03E6fE1824917F1B42a07F0Baa9ac025DF8c984")
 	err := transfer(addr, val, valt)
 	if err != nil {
 		t.Fatal(err)

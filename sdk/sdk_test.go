@@ -5,13 +5,18 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/MOSSV2/dimo-sdk-go/contract"
 	"github.com/MOSSV2/dimo-sdk-go/lib/key"
 	"github.com/MOSSV2/dimo-sdk-go/lib/types"
+	"github.com/MOSSV2/dimo-sdk-go/lib/utils"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/mitchellh/go-homedir"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
 )
 
 func TestModel(t *testing.T) {
@@ -182,4 +187,22 @@ func TestDecode(t *testing.T) {
 	if !bytes.Equal(bufa, bufb) {
 		t.Fatal("not equal", hex.EncodeToString(bufa), hex.EncodeToString(bufb))
 	}
+}
+
+func TestCpu(t *testing.T) {
+	ci, err := cpu.Info()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vms, err := mem.VirtualMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cpui := ci[0].ModelName + ", " + strconv.Itoa(len(ci)) + " Cores"
+	fmt.Println(cpui)
+	fmt.Println(utils.FormatBytes(int64(vms.Total)))
+	hi := utils.GetHardwareInfo()
+	fmt.Println(hi)
 }
