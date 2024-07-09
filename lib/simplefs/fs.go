@@ -28,7 +28,7 @@ type SimpleFs struct {
 }
 
 func New(dir string) (*SimpleFs, error) {
-	logger.Infof("simplefs create at: %s", dir)
+	logger.Infof("simplefs start at: %s", dir)
 	err := os.MkdirAll(dir, 0755)
 	if err != nil {
 		return nil, err

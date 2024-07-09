@@ -12,53 +12,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MOSSV2/dimo-sdk-go/lib/types"
 	"github.com/MOSSV2/dimo-sdk-go/lib/utils"
 
 	"github.com/consensys/gnark-crypto/ecc/bls12-377/fr"
-	"github.com/consensys/gnark-crypto/ecc/bls12-377/kzg"
 	"github.com/consensys/gnark-crypto/ecc/bw6-761/fr/mimc"
-	"github.com/ethereum/go-ethereum/common"
 )
-
-func TestAdd(t *testing.T) {
-	pk, err := kzg.NewSRS(10, big.NewInt(12345678))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for i := 0; i < 2; i++ {
-		x := pk.Pk.G1[i].X.Bytes()
-		xl := common.LeftPadBytes(x[:16], 32)
-		xr := common.LeftPadBytes(x[16:], 32)
-		fmt.Println(common.Bytes2Hex(xl))
-		fmt.Println(common.Bytes2Hex(xr))
-		xl = append(xl, xr...)
-		y := pk.Pk.G1[i].Y.Bytes()
-		yl := common.LeftPadBytes(y[:16], 32)
-		yr := common.LeftPadBytes(y[16:], 32)
-		fmt.Println(common.Bytes2Hex(yl))
-		fmt.Println(common.Bytes2Hex(yr))
-		xl = append(xl, yl...)
-		xl = append(xl, yr...)
-		fmt.Println(len(xl))
-		fmt.Printf("0x%s\n", common.Bytes2Hex(xl))
-	}
-
-	pk.Pk.G1[0].Add(&pk.Pk.G1[0], &pk.Pk.G1[1])
-	for i := 0; i < 1; i++ {
-		x := pk.Pk.G1[i].X.Bytes()
-		xl := common.LeftPadBytes(x[:16], 32)
-		xr := common.LeftPadBytes(x[16:], 32)
-		xl = append(xl, xr...)
-		y := pk.Pk.G1[i].Y.Bytes()
-		yl := common.LeftPadBytes(y[:16], 32)
-		yr := common.LeftPadBytes(y[16:], 32)
-		xl = append(xl, yl...)
-		xl = append(xl, yr...)
-		fmt.Printf("0x%s\n", common.Bytes2Hex(xl))
-	}
-
-}
 
 func TestKZG(t *testing.T) {
 	pk := GenKZGKey(MaxShard/8, big.NewInt(12345678))
@@ -77,7 +36,7 @@ func TestKZG(t *testing.T) {
 	}
 
 	rnd := utils.RandomBytes(32)
-	data := utils.RandomBytes(1 * MaxSize / 8)
+	data := utils.RandomBytes(30)
 
 	r := bytes.NewReader(data)
 
@@ -134,6 +93,68 @@ func TestKZG(t *testing.T) {
 	t.Log("data sha256: ", hex.EncodeToString(h.Sum(nil)))
 }
 
+func TestProof4(t *testing.T) {
+	pk := GenKZGKey(MaxShard, big.NewInt(123456789))
+	vk := &VerifyKey{
+		&pk.Vk,
+	}
+	ic, ip := genMoveProof(pk)
+	nt := time.Now()
+	err := vk.VerifyProof(ic, ip)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log("move proof:", time.Since(nt))
+}
+
+func genMoveProof(pk *PublicKey) (types.IChallenge, types.IProof) {
+	fileSize := MaxSize / 4
+
+	rnd := GenRandom(32)
+	data := GenRandom(fileSize)
+
+	offset1 := MaxShard / 2
+	offset2 := MaxShard * 3 / 4
+	ic := NewChallenge(rnd, offset1, offset2)
+
+	pf, err := pk.GenProof(ic, UnPadSize, data)
+	if err != nil {
+		panic(err)
+	}
+
+	c1, err := pk.GenCommitment(UnPadSize, data, 0)
+	if err != nil {
+		panic(err)
+	}
+
+	c2, err := pk.GenCommitment(UnPadSize, data, offset1)
+	if err != nil {
+		panic(err)
+	}
+
+	c3, err := pk.GenCommitment(UnPadSize, data, offset2)
+	if err != nil {
+		panic(err)
+	}
+
+	err = ic.Add(c1)
+	if err != nil {
+		panic(err)
+	}
+
+	err = ic.Add(c2)
+	if err != nil {
+		panic(err)
+	}
+
+	err = ic.Add(c3)
+	if err != nil {
+		panic(err)
+	}
+
+	return ic, pf
+}
+
 func TestKZGDec(t *testing.T) {
 	pk := GenKZGKey(MaxShard, big.NewInt(12345678))
 
@@ -141,13 +162,13 @@ func TestKZGDec(t *testing.T) {
 	data := utils.RandomBytes(1 * MaxSize)
 
 	nt := time.Now()
-	cval, err := pk.GenCommitment(MaxShard, rnd)
+	cval, err := pk.GenCommitment(MaxShard, rnd, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log("cost:", time.Since(nt))
 
-	c, err := pk.GenCommitment(UnPadSize, data)
+	c, err := pk.GenCommitment(UnPadSize, data, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +196,7 @@ func TestKZGDec(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	updata, err := Unpad(pdata, MaxSize)
+	updata, err := Unpad(pdata)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +228,7 @@ func TestKZGSloth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c, err := pk.GenCommitment(PadSize, pdata)
+	c, err := pk.GenCommitment(PadSize, pdata, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +258,7 @@ func TestKZGSloth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	updata, err := Unpad(pdata, MaxSize)
+	updata, err := Unpad(pdata)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,16 +274,13 @@ func TestPad(t *testing.T) {
 	nt := time.Now()
 	end := Pad(data)
 	t.Log("pad cost: ", time.Since(nt), len(end))
-	dec, err := Unpad(end, fsize)
+	dec, err := Unpad(end)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log("unpad cost: ", time.Since(nt), len(dec))
 
-	if len(dec) != fsize {
-		t.Fatal("size wrong")
-	}
-	if !bytes.Equal(data, dec) {
+	if !bytes.Equal(data, dec[:fsize]) {
 		t.Fatal("unequal data")
 	}
 	t.Fatal()
@@ -299,7 +317,7 @@ func TestEncrypt(t *testing.T) {
 		t.Fatal("unequal data")
 	}
 
-	updata, err := Unpad(enc, fsize)
+	updata, err := Unpad(enc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,9 +345,10 @@ func TestSloth(t *testing.T) {
 		fr_r.SetRandom()
 		copy(data[i*32:(i+1)*32], fr_r.Marshal())
 	}
-	nt := time.Now()
+
 	enc := make([]byte, len(data))
 	copy(enc, data)
+	nt := time.Now()
 	err := SlothEncode(enc, rnd)
 	if err != nil {
 		t.Fatal(err)
@@ -355,9 +374,10 @@ func TestSlothV2(t *testing.T) {
 		fr_r.SetRandom()
 		copy(data[i*32:(i+1)*32], fr_r.Marshal())
 	}
-	nt := time.Now()
+
 	enc := make([]byte, len(data))
 	copy(enc, data)
+	nt := time.Now()
 	err := SlothEncodeV2(enc, rnd)
 	if err != nil {
 		t.Fatal(err)
@@ -508,4 +528,123 @@ func TestHash(t *testing.T) {
 	}
 
 	t.Fatal("cost: ", time.Since(nt))
+}
+
+func GenRandom(len int) []byte {
+	res := make([]byte, len)
+	for i := 0; i < len; i += 7 {
+		val := rand.Int63()
+		for j := 0; i+j < len && j < 7; j++ {
+			res[i+j] = byte(val)
+			val >>= 8
+		}
+	}
+	return res
+}
+
+// 4M: 10s vs 100 ms
+func TestReverse(t *testing.T) {
+	var fr, v Fr
+	fr.SetRandom()
+	v.SetRandom()
+	nt := time.Now()
+	for i := 0; i < 4*1024*1024; i++ {
+		v.Mul(&v, &fr)
+		//v.Div(&v, &fr)
+		fr.Add(&fr, &v)
+	}
+
+	t.Fatal("cost: ", time.Since(nt))
+}
+
+// 10s, 320ms
+func TestSlothV3(t *testing.T) {
+	rnd := utils.RandomBytes(32)
+	data := make([]byte, 32*4*1024*1024)
+	var fr_r Fr
+	for i := 0; i < 4*1024*1024; i++ {
+		fr_r.SetRandom()
+		copy(data[i*32:(i+1)*32], fr_r.Marshal())
+	}
+
+	enc := make([]byte, len(data))
+	copy(enc, data)
+	nt := time.Now()
+	err := SlothEncodeV3(enc, rnd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log("enc v3 cost: ", time.Since(nt))
+	nt = time.Now()
+	err = SlothDecodeV3(enc, rnd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log("dec v3 cost: ", time.Since(nt))
+	if !bytes.Equal(data, enc) {
+		t.Fatal("unequal")
+	}
+	t.Fatal()
+}
+
+func TestSlothV4(t *testing.T) {
+	rnd := utils.RandomBytes(32)
+	var fr_r Fr
+	fr_r.SetBytes(rnd)
+	total := 32 * 1024 * 1024
+	shards := make([]Fr, total)
+	shards[0].SetOne()
+	nt := time.Now()
+	for i := 1; i < total; i++ {
+		shards[i].Mul(&shards[i-1], &fr_r)
+	}
+	t.Log("v4 cost: ", time.Since(nt))
+
+	var point Fr
+	point.SetRandom()
+	nt = time.Now()
+	val := Eval(shards, point)
+	t.Log("v4 eval cost: ", time.Since(nt))
+
+	nt = time.Now()
+	fr_r.Mul(&fr_r, &point)
+	var nval, tmp Fr
+	nval.Exp(fr_r, big.NewInt(int64(total)))
+	tmp.SetOne()
+	nval.Sub(&nval, &tmp)
+	tmp.Sub(&fr_r, &tmp)
+	nval.Div(&nval, &tmp)
+	t.Log("v4 eval1 cost: ", time.Since(nt))
+	if !nval.Equal(&val) {
+		t.Log("unequal")
+	}
+
+	nt = time.Now()
+	h := Divide(shards, point)
+	t.Log("v4 divide cost: ", time.Since(nt))
+
+	nt = time.Now()
+	re := Mul(h, point)
+	t.Log("v4 mul cost: ", time.Since(nt))
+	re[0].Add(&re[0], &val)
+
+	for i := 1; i < total; i++ {
+		if !shards[i].Equal(&re[i]) {
+			t.Fatal("not equal at: ", i)
+		}
+	}
+
+	t.Fatal()
+}
+
+func TestMarshal(t *testing.T) {
+	ew := NewEncodeWitness(6, 4)
+	ew.H.ScalarMultiplicationBase(big.NewInt(10))
+	ew.ClaimedValues[0].SetRandom()
+	ewb := ew.Serialize()
+	new := new(EncodeWitness)
+	err := new.Deserialize(ewb)
+	if err != nil {
+		t.Fatal(err)
+	}
 }

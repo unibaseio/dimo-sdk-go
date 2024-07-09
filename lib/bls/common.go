@@ -1,6 +1,8 @@
 package bls
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"hash"
 
@@ -15,7 +17,7 @@ const (
 	UnPadSize = 31
 	PadSize   = 32
 	PadByte   = 0x01 // incase zero
-	LogShard  = 20
+	LogShard  = 25
 	MinShard  = 2
 	MaxShard  = 1 << LogShard
 	MaxSize   = MaxShard * UnPadSize // per piece
@@ -81,25 +83,42 @@ func (c *Commitment) Raw() []byte {
 var _ types.IChallenge = (*Challenge)(nil)
 
 type Challenge struct {
-	typ        int
-	RandomInt  int
-	RandomByte []byte
-	Sum        G1
-	Digests    []G1
+	typ     int
+	Random  []byte
+	Sum     G1
+	Digests []G1
 }
 
-func NewChallenge(r []byte) types.IChallenge {
-	chal := &Challenge{
-		RandomByte: r,
-		Digests:    make([]G1, 0, 1),
+func NewChallenge(r []byte, in ...int) types.IChallenge {
+	if len(r) != 32 {
+		panic("invalid random length, should be 32")
 	}
+	buf := make([]byte, 32+8*len(in))
+	copy(buf, r)
+	for i := range in {
+		binary.BigEndian.PutUint64(buf[32+i*8:32+(i+1)*8], uint64(in[i]))
+	}
+
+	chal := &Challenge{
+		typ:     1,
+		Random:  buf,
+		Digests: make([]G1, 0, 1),
+	}
+
+	if len(buf) == 48 {
+		chal.typ = 2
+	}
+
 	return chal
 }
 
 func NewPointChallenge(val int) types.IChallenge {
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, uint64(val))
 	chal := &Challenge{
-		RandomInt: val,
-		Digests:   make([]G1, 0, 1),
+		typ:     3,
+		Random:  buf,
+		Digests: make([]G1, 0, 1),
 	}
 	return chal
 }
@@ -125,54 +144,93 @@ func (ch *Challenge) Commitment() types.ICommitment {
 	}
 }
 
-type MultiProof struct {
-	H            G1
-	ClaimedValue []Fr
+type EncodeWitness struct {
+	Root          G1
+	Commits       []G1 // n
+	MoveCommits   []G1 // k
+	LimitCommits  []G1 // k
+	H             G1   // k
+	ClaimedValues []Fr // k
 }
 
-var _ types.IProof = (*Proof)(nil)
-
-type Proof struct {
-	// H quotient polynomial (f - f(r)))/(x-r)
-	H G1
-
-	// ClaimedValue purported value
-	ClaimedValue Fr
+func NewEncodeWitness(n, k int) *EncodeWitness {
+	return &EncodeWitness{
+		Commits:       make([]G1, n),
+		MoveCommits:   make([]G1, k),
+		LimitCommits:  make([]G1, k),
+		ClaimedValues: make([]Fr, k),
+	}
 }
 
-func NewProof(buf []byte) (*Proof, error) {
-	pf := Proof{}
-	if len(buf) != ProofSize {
-		return nil, fmt.Errorf("wrong size: %d, need %d", len(buf), ProofSize)
+func (ew *EncodeWitness) Serialize() []byte {
+	var w bytes.Buffer
+	enc := bls.NewEncoder(&w, bls.RawEncoding())
+	toEncode := []interface{}{
+		&ew.Root,
+		ew.Commits,
+		ew.MoveCommits,
+		ew.LimitCommits,
+		&ew.H,
+		ew.ClaimedValues,
+	}
+	for _, v := range toEncode {
+		if err := enc.Encode(v); err != nil {
+			panic(err)
+		}
 	}
 
-	pf.ClaimedValue.SetBytes(buf[:FrSize])
-	_, err := pf.H.SetBytes(buf[FrSize : FrSize+G1Size])
-	if err != nil {
-		return nil, err
-	}
-	return &pf, nil
+	return w.Bytes()
 }
 
-func (pf *Proof) Type() int {
-	return 1
-}
-
-func (pf *Proof) Add(ip types.IProof) error {
-	pr, ok := ip.(*Proof)
-	if !ok {
-		return fmt.Errorf("wrong proof1")
+func (ew *EncodeWitness) Deserialize(buf []byte) error {
+	dec := bls.NewDecoder(bytes.NewReader(buf), bls.NoSubgroupChecks())
+	toDecode := []interface{}{
+		&ew.Root,
+		&ew.Commits,
+		&ew.MoveCommits,
+		&ew.LimitCommits,
+		&ew.H,
+		&ew.ClaimedValues,
 	}
-	pf.ClaimedValue.Add(&pf.ClaimedValue, &pr.ClaimedValue)
-	pf.H.Add(&pf.H, &pr.H)
+	for _, v := range toDecode {
+		if err := dec.Decode(v); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func (pf *Proof) Serialize() []byte {
-	buf := make([]byte, FrSize+G1Size)
-	copy(buf[:FrSize], pf.ClaimedValue.Marshal())
-	hbyte := pf.H.Bytes()
-	copy(buf[FrSize:FrSize+G1Size], hbyte[:])
+func Eval(p []Fr, point Fr) Fr {
+	var res Fr
+	n := len(p)
+	res.Set(&p[n-1])
+	for i := n - 2; i >= 0; i-- {
+		res.Mul(&res, &point).Add(&res, &p[i])
+	}
+	return res
+}
 
-	return buf
+func Divide(f []Fr, a Fr) []Fr {
+	var t Fr
+	res := make([]fr.Element, len(f))
+	copy(res, f)
+	for i := len(res) - 2; i >= 1; i-- {
+		t.Mul(&res[i+1], &a)
+		res[i].Add(&res[i], &t)
+	}
+	return res[1:]
+}
+
+func Mul(f []Fr, a Fr) []Fr {
+	var t, na Fr
+	na.Neg(&a)
+	res := make([]Fr, len(f)+1)
+	for i := 1; i < len(f); i++ {
+		t.Mul(&f[i], &na)
+		res[i].Add(&f[i-1], &t)
+	}
+	t.Mul(&f[0], &na)
+	res[0].Set(&t)
+	res[len(f)].Set(&f[len(f)-1])
+	return res
 }

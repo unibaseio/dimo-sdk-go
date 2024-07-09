@@ -2,6 +2,7 @@ package bls
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math/big"
@@ -10,6 +11,7 @@ import (
 
 	bls "github.com/consensys/gnark-crypto/ecc/bls12-377"
 	"github.com/consensys/gnark-crypto/ecc/bls12-377/kzg"
+	gkzg "github.com/consensys/gnark-crypto/kzg"
 )
 
 func (ppk *PointPublicKey) GenCommitments(slen int, r io.Reader) ([]types.ICommitment, error) {
@@ -18,12 +20,12 @@ func (ppk *PointPublicKey) GenCommitments(slen int, r io.Reader) ([]types.ICommi
 
 func (ppk *PointPublicKey) GenCommitment(slen int, d []byte) (types.ICommitment, error) {
 	if len(d) == 0 {
-		return nil, fmt.Errorf("invalid data size: zero")
+		return nil, fmt.Errorf("zero size")
 	}
 
 	shards := Split(slen, d)
 	if len(shards) > MaxShard {
-		return nil, fmt.Errorf("data size too large")
+		return nil, fmt.Errorf("invalid data shards %d: too large", len(shards))
 	}
 
 	srs := kzg.ProvingKey{
@@ -39,27 +41,33 @@ func (ppk *PointPublicKey) GenCommitment(slen int, d []byte) (types.ICommitment,
 	}, nil
 }
 
-func (ppk *PointPublicKey) GenProofs(ic types.IChallenge, typ int, r io.Reader) ([]types.IProof, error) {
+func (ppk *PointPublicKey) GenProofs(ic types.IChallenge, slen int, r io.Reader) ([]types.IProof, error) {
 	return nil, fmt.Errorf("unsupported method")
 }
 
-func (ppk *PointPublicKey) GenProof(ic types.IChallenge, typ int, d []byte) (types.IProof, error) {
+func (ppk *PointPublicKey) GenProof(ic types.IChallenge, slen int, d []byte) (types.IProof, error) {
 	chal, ok := ic.(*Challenge)
 	if !ok {
 		return nil, fmt.Errorf("invalid chal")
 	}
 
 	if len(d) == 0 {
-		return nil, fmt.Errorf("invalid data size: zero")
+		return nil, fmt.Errorf("zero size")
 	}
 
-	rnd := int(chal.RandomInt)
-	shards := Split(typ, d)
+	shards := Split(slen, d)
 	if len(shards) > MaxShard {
-		return nil, fmt.Errorf("data size too large")
+		return nil, fmt.Errorf("invalid data shards %d: too large", len(shards))
 	}
+
+	rnd := int(binary.BigEndian.Uint64(chal.Random))
 	if rnd >= len(shards) {
 		return nil, fmt.Errorf("random too large")
+	}
+
+	if len(shards) < MinShard {
+		var fr Fr
+		shards = append(shards, fr)
 	}
 
 	res := &Proof{
@@ -102,7 +110,7 @@ func (pvk *PointVerifyKey) VerifyProof(ic types.IChallenge, ip types.IProof) err
 		return fmt.Errorf("wrong proof")
 	}
 
-	rnd := int(chal.RandomInt)
+	rnd := int(binary.BigEndian.Uint64(chal.Random))
 	if rnd > pvk.N {
 		return fmt.Errorf("invalid challenge random")
 	}
@@ -143,6 +151,12 @@ func (pvk *PointVerifyKey) VerifyProof(ic types.IChallenge, ip types.IProof) err
 
 	return nil
 }
+
+type MultiProof struct {
+	H            G1
+	ClaimedValue []Fr
+}
+
 func (ppk *PointPublicKey) GenParamProof(randoms []int) (*MultiProof, error) {
 	shards := make([]Fr, ppk.N)
 	for i := 0; i < ppk.N; i++ {
@@ -151,12 +165,12 @@ func (ppk *PointPublicKey) GenParamProof(randoms []int) (*MultiProof, error) {
 	return ppk.genMultiProof(randoms, shards)
 }
 
-func (ppk *PointPublicKey) GenMultiProof(randoms []int, typ int, d []byte) (*MultiProof, error) {
+func (ppk *PointPublicKey) GenMultiProof(randoms []int, slen int, d []byte) (*MultiProof, error) {
 	if len(d) == 0 {
 		return nil, fmt.Errorf("invalid data size: zero")
 	}
 
-	shards := Split(typ, d)
+	shards := Split(slen, d)
 	if len(shards) > ppk.N {
 		return nil, fmt.Errorf("data size too large")
 	}
@@ -323,7 +337,7 @@ func (pvk *PointVerifyKey) Deserialize(res []byte) error {
 	return nil
 }
 
-var _ types.IPublicKey = (*PointPublicKey)(nil)
+var _ gkzg.SRS = (*PointPublicKey)(nil)
 
 type PointPublicKey struct {
 	N      int
@@ -375,9 +389,8 @@ func (ppk *PointPublicKey) VerifyKey() types.IVerifyKey {
 	return ppk.ToVerifyKey()
 }
 
-func (ppk *PointPublicKey) Serialize() []byte {
-	var w bytes.Buffer
-	enc := bls.NewEncoder(&w, bls.RawEncoding())
+func (ppk *PointPublicKey) WriteTo(w io.Writer) (int64, error) {
+	enc := bls.NewEncoder(w)
 	toEncode := []interface{}{
 		ppk.G1L,
 		ppk.G1R,
@@ -389,11 +402,30 @@ func (ppk *PointPublicKey) Serialize() []byte {
 			panic(err)
 		}
 	}
-	return w.Bytes()
+
+	return enc.BytesWritten(), nil
 }
 
-func (ppk *PointPublicKey) Deserialize(res []byte) error {
-	dec := bls.NewDecoder(bytes.NewReader(res), bls.NoSubgroupChecks())
+func (ppk *PointPublicKey) WriteRawTo(w io.Writer) (int64, error) {
+	// encode the SRS
+	enc := bls.NewEncoder(w, bls.RawEncoding())
+	toEncode := []interface{}{
+		ppk.G1L,
+		ppk.G1R,
+		ppk.G2,
+		ppk.GT,
+	}
+	for _, v := range toEncode {
+		if err := enc.Encode(v); err != nil {
+			panic(err)
+		}
+	}
+
+	return enc.BytesWritten(), nil
+}
+
+func (ppk *PointPublicKey) ReadFrom(r io.Reader) (n int64, err error) {
+	dec := bls.NewDecoder(r)
 	toDecode := []interface{}{
 		&ppk.G1L,
 		&ppk.G1R,
@@ -402,12 +434,42 @@ func (ppk *PointPublicKey) Deserialize(res []byte) error {
 	}
 	for _, v := range toDecode {
 		if err := dec.Decode(v); err != nil {
-			return err
+			return dec.BytesRead(), err
 		}
 	}
 	ppk.N = len(ppk.G1L)
 
-	return nil
+	return dec.BytesRead(), nil
+}
+
+func (ppk *PointPublicKey) UnsafeReadFrom(r io.Reader) (n int64, err error) {
+	dec := bls.NewDecoder(r, bls.NoSubgroupChecks())
+	toDecode := []interface{}{
+		&ppk.G1L,
+		&ppk.G1R,
+		&ppk.G2,
+		&ppk.GT,
+	}
+	for _, v := range toDecode {
+		if err := dec.Decode(v); err != nil {
+			return dec.BytesRead(), err
+		}
+	}
+	ppk.N = len(ppk.G1L)
+
+	return dec.BytesRead(), nil
+}
+
+func (ppk *PointPublicKey) Serialize() []byte {
+	var w bytes.Buffer
+	ppk.WriteRawTo(&w)
+	return w.Bytes()
+}
+
+func (ppk *PointPublicKey) Deserialize(res []byte) error {
+	_, err := ppk.UnsafeReadFrom(bytes.NewReader(res))
+
+	return err
 }
 
 func (ppk *PointPublicKey) CalCommit() {

@@ -127,7 +127,7 @@ func initConstants() {
 	for i := 0; i < mimcNbRounds; i++ {
 		rnd = hash.Sum(nil)
 		mimcConstants[i].SetBytes(rnd)
-		//fmt.Println(mimcConstants[i].Text(16))
+		//log.Println(mimcConstants[i].Text(16))
 		hash.Reset()
 		_, _ = hash.Write(rnd)
 	}

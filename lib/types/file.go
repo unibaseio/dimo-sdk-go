@@ -2,7 +2,9 @@ package types
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -10,19 +12,30 @@ import (
 )
 
 type Policy struct {
-	N, K int8
-	Hash int8 // which hash type
+	N uint8
+	K uint8
+}
+
+func (p Policy) Check() error {
+	switch {
+	case p.N == 6 && p.K == 4:
+	case p.N == 14 && p.K == 7:
+	case p.N == 32 && p.K == 16:
+	case p.N == 64 && p.K == 32:
+	default:
+		return fmt.Errorf("unsupported rs policy: %d %d", p.N, p.K)
+	}
+	return nil
 }
 
 type FileCore struct {
-	OnChain  bool
-	Owner    common.Address
+	Policy   Policy
 	Name     string
 	Hash     string
-	Policy   Policy
 	Size     int64
+	Owner    common.Address
 	Creation time.Time
-	Pieces   []string
+	Append   bool
 }
 
 func (frc *FileCore) Serialize() ([]byte, error) {
@@ -35,7 +48,7 @@ func (frc *FileCore) Deserialize(b []byte) error {
 
 type FileReceipt struct {
 	FileCore
-	StoredOn [][]common.Address
+	Pieces []string
 }
 
 func (fr *FileReceipt) Serialize() ([]byte, error) {
@@ -46,29 +59,30 @@ func (fr *FileReceipt) Deserialize(b []byte) error {
 	return cbor.Unmarshal(b, fr)
 }
 
-type FileCoreWithSize struct {
-	FileCore
-	OnlyPiece bool
-	Sizes     []int64
+type FileFull struct {
+	FileReceipt
+	Proofs     [][]byte
+	PieceSizes []int64
 }
 
-func (fcws *FileCoreWithSize) Serialize() ([]byte, error) {
-	return cbor.Marshal(fcws)
+func (ff *FileFull) Serialize() ([]byte, error) {
+	return cbor.Marshal(ff)
 }
 
-func (fcws *FileCoreWithSize) Deserialize(b []byte) error {
-	return cbor.Unmarshal(b, fcws)
+func (ff *FileFull) Deserialize(b []byte) error {
+	return cbor.Unmarshal(b, ff)
 }
 
 type PieceCore struct {
-	OnChain  bool
-	Hash     int8 // 0 means sha256
+	Policy   Policy
 	Name     string
-	Size     int64  // raw size
-	File     string // belongs to which file
-	Index    uint64
-	Creation time.Time
-	Replicas []string // calulated by policy
+	Serial   uint64
+	Size     int64 // raw size
+	Start    uint64
+	Expire   uint64
+	Price    *big.Int
+	Owner    common.Address
+	Streamer common.Address
 }
 
 func (pc *PieceCore) Serialize() ([]byte, error) {
@@ -81,6 +95,7 @@ func (pc *PieceCore) Deserialize(b []byte) error {
 
 type PieceReceipt struct {
 	PieceCore
+	Replicas []string
 	StoredOn []common.Address
 }
 
@@ -92,26 +107,18 @@ func (cr *PieceReceipt) Deserialize(b []byte) error {
 	return cbor.Unmarshal(b, cr)
 }
 
-type ReplicaCred struct {
-	Proof []byte
-	Sign  []byte
-}
-
-func (rs *ReplicaCred) Serialize() ([]byte, error) {
-	return cbor.Marshal(rs)
-}
-
-func (rs *ReplicaCred) Deserialize(b []byte) error {
-	return cbor.Unmarshal(b, rs)
+type PieceWitness struct {
+	Choose  uint8
+	Witness []byte
 }
 
 type ReplicaCore struct {
-	ReplicaCred
-	OnChain  bool
+	Fake     bool
 	Name     string // encoded
+	Serial   uint64
 	Size     int64  // stored size
 	Piece    string // belongs to which piece
-	Creation time.Time
+	Index    uint8
 	StoredOn common.Address
 }
 
@@ -123,35 +130,46 @@ func (rc *ReplicaCore) Deserialize(b []byte) error {
 	return cbor.Unmarshal(b, rc)
 }
 
-type ReplicaInfo struct {
-	File    uint64
-	Piece   uint64
-	Index   int
-	Replica string
-	Sign    []byte
-	Store   common.Address
+type ReplicaWitness struct {
+	Index uint64
+	Proof []byte
+}
+
+func (rw *ReplicaWitness) Serialize() ([]byte, error) {
+	return cbor.Marshal(rw)
+}
+
+func (rw *ReplicaWitness) Deserialize(b []byte) error {
+	return cbor.Unmarshal(b, rw)
 }
 
 type IFile interface {
-	Put(context.Context, common.Address, io.Reader) (FileCoreWithSize, error)
-	Get(context.Context, string, io.Writer) (FileReceipt, error)
-	GetPiece(context.Context, string, io.Writer, Options) (PieceReceipt, error)
-	GetReplica(context.Context, string, Options) (ReplicaCore, error)
+	AddFile(context.Context, FileReceipt) error
+	GetFile(context.Context, string, Options) (FileReceipt, error)
+	GetPiece(context.Context, string, Options) (PieceReceipt, error)
+	GetReplica(context.Context, string, io.Writer, Options) (ReplicaCore, error)
 
 	ListFile(context.Context, common.Address, Options) ([]FileReceipt, error)
 	ListPiece(context.Context, common.Address, Options) ([]PieceReceipt, error)
 	ListReplica(context.Context, common.Address, Options) ([]ReplicaCore, error)
-
-	Request(context.Context, common.Address, string) (common.Address, error)
-	Confirm(context.Context, common.Address, ReplicaCore) error
 }
 
-type IReplicaStore interface {
-	Put(context.Context, PieceCore, []byte) (ReplicaCore, error)
-	Get(context.Context, string, io.Writer, Options) (ReplicaCore, error)
-	List(context.Context, common.Address, Options) ([]ReplicaCore, error)
+type IPieceStore interface {
+	PutPiece(context.Context, PieceCore, []byte, bool) error
+	GetPiece(context.Context, string, io.Writer, Options) (PieceReceipt, error)
+	GetPieceBySerial(context.Context, uint64) (string, error)
 
-	GenProof(context.Context, string, []byte, int) ([]byte, error)
+	PutReplica(context.Context, ReplicaCore, []byte, bool) error
+	GetReplica(context.Context, string, io.Writer, Options) (ReplicaCore, error)
+	GetReplicaBySerial(context.Context, uint64) (string, error)
+
+	DeleteData(ctx context.Context, name string) error
+
+	PutReplicaWitness(context.Context, common.Address, ReplicaWitness) error
+	GetReplicaWitness(context.Context, common.Address, uint64) (ReplicaWitness, error)
+
+	PutFile(context.Context, FileCore, []string, bool) error
+	GetFile(context.Context, string, Options) (FileReceipt, error)
 }
 
 type ICommitment interface {
@@ -176,7 +194,7 @@ type IPublicKey interface {
 	VerifyKey() IVerifyKey
 
 	GenCommitments(int, io.Reader) ([]ICommitment, error)
-	GenCommitment(int, []byte) (ICommitment, error)
+	GenCommitment(int, []byte, int) (ICommitment, error)
 	GenProofs(IChallenge, int, io.Reader) ([]IProof, error)
 	GenProof(IChallenge, int, []byte) (IProof, error)
 

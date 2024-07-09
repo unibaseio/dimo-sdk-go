@@ -8,33 +8,19 @@ import (
 	"strings"
 
 	"github.com/MOSSV2/dimo-sdk-go/lib/types"
-	"github.com/MOSSV2/dimo-sdk-go/lib/utils"
-	"github.com/ethereum/go-ethereum/common"
 )
 
-func UploadFileMeta(baseUrl string, auth types.Auth, stream common.Address, fcws types.FileCoreWithSize) (types.FileReceipt, error) {
-	var res types.FileReceipt
+func UploadFileMeta(baseUrl string, auth types.Auth, fcws types.FileReceipt) error {
 
 	form := url.Values{}
-	form.Set("stream", stream.Hex())
 	fcwsb, err := json.Marshal(fcws)
 	if err != nil {
-		return res, err
+		return err
 	}
-
 	form.Set("meta", hex.EncodeToString(fcwsb))
 
-	resByte, err := doRequest(context.TODO(), baseUrl, "/api/uploadFileMeta", auth, strings.NewReader(form.Encode()))
-	if err != nil {
-		return res, err
-	}
-
-	err = json.Unmarshal(resByte, &res)
-	if err != nil {
-		return res, err
-	}
-
-	return res, nil
+	_, err = doRequest(context.TODO(), baseUrl, "/api/uploadFileMeta", auth, strings.NewReader(form.Encode()))
+	return err
 }
 
 func GetReplicaReceipt(baseUrl string, auth types.Auth, name string) (types.ReplicaCore, error) {
@@ -178,22 +164,22 @@ func ListFile(baseUrl string, auth types.Auth, filter string) (types.ListFileRes
 	return res, nil
 }
 
-func RequestPiece(baseUrl string, auth types.Auth, name string) (common.Address, error) {
+func RequestPiece(baseUrl string, auth types.Auth, name string) (types.PieceWitness, error) {
 	form := url.Values{}
 	form.Set("name", name)
 
+	var res types.PieceWitness
 	resByte, err := doRequest(context.TODO(), baseUrl, "/api/requestPiece", auth, strings.NewReader(form.Encode()))
 	if err != nil {
-		return common.Address{}, err
+		return res, err
 	}
 
-	var addrs string
-	err = json.Unmarshal(resByte, &addrs)
+	err = json.Unmarshal(resByte, &res)
 	if err != nil {
-		return common.Address{}, err
+		return res, err
 	}
 
-	return utils.HexToAddress(addrs), nil
+	return res, nil
 }
 
 func ConfirmPiece(baseUrl string, auth types.Auth, name, proof string) ([]byte, error) {

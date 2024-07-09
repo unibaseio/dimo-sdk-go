@@ -3,8 +3,8 @@ package archive
 import (
 	"archive/tar"
 	"compress/gzip"
-	"fmt"
 	"io"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -72,7 +72,7 @@ func Tar(src, dst string, compress string, maxSize int) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("pack %s %s, written %d bytes\n", hdr.Name, fi.Name(), n)
+		log.Printf("pack %s %s, written %d bytes\n", hdr.Name, fi.Name(), n)
 
 		return nil
 	})
@@ -128,7 +128,7 @@ func UnTar(src, dst string, compress string) error {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("unpack %s, handle %d bytes\n", dstFileDir, n)
+			log.Printf("unpack %s, handle %d bytes\n", dstFileDir, n)
 		}
 	}
 }

@@ -3,110 +3,99 @@ package contract
 import (
 	"encoding/hex"
 	"fmt"
+	"math/big"
 
 	"github.com/MOSSV2/dimo-sdk-go/lib/bls"
-	"github.com/ethereum/go-ethereum/common"
 )
 
-const (
-	mUncompressed byte = 0b000 << 5
-)
+func G1ToString(g bls.G1) string {
+	gbyte := g.Bytes()
+	return hex.EncodeToString(gbyte[:])
+}
 
-func StringToSolByte(s string) ([]byte, error) {
-	gb, err := hex.DecodeString(s)
+func G1InSolidity(g bls.G1) []byte {
+	val := new(big.Int)
+	g.X.BigInt(val)
+	res := ToBytes(6, val)
+
+	g.Y.BigInt(val)
+	resy := ToBytes(6, val)
+	res = append(res, resy...)
+	return res
+}
+
+func G1StringInSolidity(s string) ([]byte, error) {
+	b, err := hex.DecodeString(s)
 	if err != nil {
 		return nil, err
 	}
-	return ByteToSolByte(gb)
-}
-
-func ByteToSolByte(gb []byte) ([]byte, error) {
-	switch len(gb) {
-	case 32:
-		return gb, nil
-	case 48:
-		var g1 bls.G1
-		_, err := g1.SetBytes(gb)
-		if err != nil {
-			return nil, err
-		}
-		return G1ToSolByte(g1), nil
-	case 96:
-		var g2 bls.G2
-		_, err := g2.SetBytes(gb)
-		if err != nil {
-			return nil, err
-		}
-		return G2ToSolByte(g2), nil
+	var g bls.G1
+	_, err = g.SetBytes(b)
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("invalid length")
+
+	return G1InSolidity(g), nil
 }
 
-func G1ToSolByte(g1 bls.G1) []byte {
-	x := common.LeftPadBytes(g1.X.Marshal(), 64)
-	y := common.LeftPadBytes(g1.Y.Marshal(), 64)
-	x = append(x, y...)
-	return x
-}
-
-func G2ToSolByte(g2 bls.G2) []byte {
-	x := common.LeftPadBytes(g2.X.A1.Marshal(), 64)
-	x0 := common.LeftPadBytes(g2.X.A0.Marshal(), 64)
-	x = append(x, x0...)
-	y1 := common.LeftPadBytes(g2.Y.A1.Marshal(), 64)
-	x = append(x, y1...)
-	y0 := common.LeftPadBytes(g2.Y.A0.Marshal(), 64)
-	x = append(x, y0...)
-	return x
-}
-
-func SolByteToG1(gb []byte) (bls.G1, error) {
-	var g1 bls.G1
-	if len(gb) != 128 {
-		return g1, fmt.Errorf("invalid length")
+func SolidityToG1(buf []byte) (bls.G1, error) {
+	var res bls.G1
+	if len(buf) != 96 {
+		return res, fmt.Errorf("short g1")
 	}
-	ngb := make([]byte, bls.G1Size*2)
-	copy(ngb, gb[16:64])
-	copy(ngb[48:], gb[80:128])
-	ngb[0] |= mUncompressed
-	_, err := g1.SetBytes(ngb)
-	return g1, err
+
+	val := ToValue(buf[:48])
+	res.X.SetBigInt(val)
+
+	val = ToValue(buf[48:96])
+	res.Y.SetBigInt(val)
+
+	return res, nil
 }
 
-func SolByteToG2(gb []byte) (bls.G2, error) {
-	var g2 bls.G2
-	if len(gb) != 256 {
-		return g2, fmt.Errorf("invalid length")
-	}
-	ngb := make([]byte, bls.G2Size*2)
-	copy(ngb, gb[16:64])
-	copy(ngb[48:], gb[80:128])
-	copy(ngb[96:], gb[144:192])
-	copy(ngb[144:], gb[208:256])
-
-	ngb[0] |= mUncompressed
-	_, err := g2.SetBytes(ngb)
-	return g2, err
+func FrInSolidity(g bls.Fr) []byte {
+	val := new(big.Int)
+	g.BigInt(val)
+	res := ToBytes(6, val)
+	return res
 }
 
-func SolByteToString(gb []byte) (string, error) {
-	switch len(gb) {
-	case 32:
-		return hex.EncodeToString(gb), nil
-	case 128:
-		g1, err := SolByteToG1(gb)
-		if err != nil {
-			return "", err
-		}
-		ngb := g1.Bytes()
-		return hex.EncodeToString(ngb[:]), nil
-	case 256:
-		g2, err := SolByteToG2(gb)
-		if err != nil {
-			return "", err
-		}
-		ngb := g2.Bytes()
-		return hex.EncodeToString(ngb[:]), nil
+func SolidityToFr(buf []byte) (bls.Fr, error) {
+	var res bls.Fr
+	if len(buf) != 48 {
+		return res, fmt.Errorf("short fr")
 	}
-	return "", fmt.Errorf("invalid length")
+
+	val := ToValue(buf[:48])
+	res.SetBigInt(val)
+
+	return res, nil
+}
+
+func ToBytes(fc int, val *big.Int) []byte {
+	base := new(big.Int).Lsh(big.NewInt(1), 64)
+	tmpb := new(big.Int).Set(val)
+
+	res := make([]byte, 0, 8*fc)
+	for i := 0; i < fc; i++ {
+		tmp := new(big.Int).Mod(tmpb, base)
+		tmpb.Rsh(tmpb, 64)
+		res = append(res, make([]byte, 8-len(tmp.Bytes()))...)
+		res = append(res, tmp.Bytes()...)
+	}
+	return res
+}
+
+func ToValue(buf []byte) *big.Int {
+	base := big.NewInt(1)
+	tmp := new(big.Int)
+	res := new(big.Int)
+
+	for i := 0; i < len(buf)/8; i++ {
+		tmp.SetBytes(buf[i*8 : (i+1)*8])
+		tmp.Mul(tmp, base)
+		res.Add(res, tmp)
+		base.Lsh(base, 64)
+	}
+	return res
 }

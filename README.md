@@ -26,7 +26,7 @@ go sdk for dimo，include file, model and contract operations
 > ./download --sk=4215875d8ac13ac4fb0876a0ecd0384aca0ce16b627bf975c8084915aad79470 --name=4b59a3a5fa50d178dc4594c400097d497a206cff98865e815333ed7504558336 --path=./upload
 ```
 
-### upload huggingface repo
+### upload huggingface repo(todo)
 
 ```shell
 > cd example/hub

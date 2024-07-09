@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	"log"
 	"math/rand"
 
 	"github.com/MOSSV2/dimo-sdk-go/lib/key"
@@ -22,12 +22,12 @@ func main() {
 		return
 	}
 	if len(er.Edges) == 0 {
-		fmt.Println("no hub node")
+		log.Println("no hub node")
 		return
 	}
 
 	url := er.Edges[rand.Intn(len(er.Edges))].ExposeURL
-	fmt.Println("remote hub: ", url)
+	log.Println("remote hub: ", url)
 
 	rc := types.RepoCore{
 		Name:     *modelstr,
@@ -36,9 +36,9 @@ func main() {
 
 	err = sdk.SubmitModelRepo(url, au, rc)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 
-	fmt.Println("submit model repo: ", rc)
+	log.Println("submit model repo: ", rc)
 }

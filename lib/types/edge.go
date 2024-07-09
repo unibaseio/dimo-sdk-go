@@ -10,12 +10,13 @@ import (
 )
 
 const (
-	ClientType  = "client"
-	StoreType   = "store"
-	StreamType  = "stream"
-	ComputeType = "compute"
-	GatewatType = "gateway"
-	HubType     = "hub"
+	StoreType     = "store"
+	StreamType    = "stream"
+	ValidatorType = "validator"
+	ComputeType   = "compute"
+	GatewayType   = "gateway"
+	ClientType    = "client"
+	HubType       = "hub"
 )
 
 type EdgeReceipt struct {
@@ -30,6 +31,7 @@ type EdgeMeta struct {
 	Name      common.Address
 	PublicKey []byte
 	ExposeURL string
+	Hardware  HardwareInfo
 }
 
 func (em *EdgeMeta) Serialize() ([]byte, error) {
@@ -38,6 +40,19 @@ func (em *EdgeMeta) Serialize() ([]byte, error) {
 
 func (em *EdgeMeta) Deserialize(b []byte) error {
 	return cbor.Unmarshal(b, em)
+}
+
+type HardwareInfo struct {
+	CPU    string
+	Memory string
+}
+
+func (gm *HardwareInfo) Serialize() ([]byte, error) {
+	return cbor.Marshal(gm)
+}
+
+func (gm *HardwareInfo) Deserialize(b []byte) error {
+	return cbor.Unmarshal(b, gm)
 }
 
 type IEdge interface {

@@ -5,14 +5,14 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"math/big"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
-	"time"
 
 	"github.com/MOSSV2/dimo-sdk-go/contract"
 	"github.com/MOSSV2/dimo-sdk-go/lib/key"
+	"github.com/MOSSV2/dimo-sdk-go/lib/types"
 	"github.com/MOSSV2/dimo-sdk-go/sdk"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/mitchellh/go-homedir"
@@ -21,7 +21,8 @@ import (
 func main() {
 	skstr := flag.String("sk", "", "private key for sending transaction")
 	pathstr := flag.String("path", "", "dir or file path to upload")
-	mf := flag.Bool("model", false, "download model or regular file/dir")
+	mf := flag.Bool("model", false, "upload type: model or regular file/dir")
+	fname := flag.Bool("name", false, "file name in public, default is sha256")
 	flag.Parse()
 
 	sk, err := crypto.HexToECDSA(*skstr)
@@ -42,17 +43,17 @@ func main() {
 	if *mf {
 		err = UploadModel(sk, fp)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 		}
 	} else {
-		err = UploadFile(sk, fp)
+		err = UploadFile(sk, fp, *fname)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 		}
 	}
 }
 
-func UploadFile(sk *ecdsa.PrivateKey, fp string) error {
+func UploadFile(sk *ecdsa.PrivateKey, fp string, fname bool) error {
 	au, err := key.BuildAuth(sk, []byte("upload"))
 	if err != nil {
 		return err
@@ -61,17 +62,9 @@ func UploadFile(sk *ecdsa.PrivateKey, fp string) error {
 	// charge from server
 	sdk.Login(sdk.ServerURL, au)
 
-	ar, err := sdk.BalanceOf(sdk.ServerURL, au)
+	err = contract.CheckBalance(au.Addr)
 	if err != nil {
 		return err
-	}
-	// wait for has balance
-	for ar.Value.Cmp(big.NewInt(0)) == 0 {
-		time.Sleep(3 * time.Second)
-		ar, err = sdk.BalanceOf(sdk.ServerURL, au)
-		if err != nil {
-			return err
-		}
 	}
 
 	fi, err := os.Stat(fp)
@@ -79,20 +72,37 @@ func UploadFile(sk *ecdsa.PrivateKey, fp string) error {
 		return err
 	}
 
+	policy := types.Policy{
+		N: 6,
+		K: 4,
+	}
+
 	if !fi.IsDir() {
+		nm := ""
+		if fname {
+			nm = filepath.Base(fp)
+		}
+
 		// upload to stream and submit to gateway
-		res, submitter, err := sdk.UploadToStream(sdk.ServerURL, au, fp, "")
+		res, streamer, err := sdk.Upload(sdk.ServerURL, au, policy, fp, nm)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("upload %s, sha256: %s\n", fp, res.Name)
-		fmt.Printf("submit %s to chain\n", res.Name)
+		pcs, err := sdk.CheckFileFull(res, streamer, fp)
+		if err != nil {
+			return err
+		}
+		log.Printf("upload %s to %s, sha256: %s\n", fp, streamer, res.Hash)
+		log.Printf("submit %s to chain\n", res.Name)
 
 		// submit meta to chain
-		err = contract.AddFileAndPiece(sk, res.Name, res.FileCore, submitter)
-		if err != nil {
-			return err
+		for _, pc := range pcs {
+			err = contract.AddPiece(sk, pc)
+			if err != nil {
+				return err
+			}
 		}
+
 		return nil
 	}
 
@@ -104,15 +114,28 @@ func UploadFile(sk *ecdsa.PrivateKey, fp string) error {
 		if fi.IsDir() {
 			return nil
 		}
-		res, submitter, err := sdk.UploadToStream(sdk.ServerURL, au, fileName, "")
+		nm := ""
+		if fname {
+			nm = filepath.Base(fileName)
+		}
+		res, streamer, err := sdk.Upload(sdk.ServerURL, au, policy, fileName, nm)
 		if err != nil {
 			return nil
 		}
-		fmt.Printf("upload %s, sha256: %s\n", fp, res.Name)
-		fmt.Printf("submit %s to chain\n", res.Name)
-		err = contract.AddFileAndPiece(sk, res.Name, res.FileCore, submitter)
+		pcs, err := sdk.CheckFileFull(res, streamer, fp)
 		if err != nil {
 			return err
+		}
+
+		log.Printf("upload %s to %s, sha256: %s\n", fp, streamer, res.Hash)
+		log.Printf("submit %s to chain\n", res.Name)
+
+		// submit meta to chain
+		for _, pc := range pcs {
+			err = contract.AddPiece(sk, pc)
+			if err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -126,18 +149,10 @@ func UploadModel(sk *ecdsa.PrivateKey, fp string) error {
 
 	sdk.Login(sdk.ServerURL, au)
 
-	ar, err := sdk.BalanceOf(sdk.ServerURL, au)
+	err = contract.CheckBalance(au.Addr)
 	if err != nil {
 		return err
 	}
-	for ar.Value.Cmp(big.NewInt(0)) == 0 {
-		time.Sleep(3 * time.Second)
-		ar, err = sdk.BalanceOf(sdk.ServerURL, au)
-		if err != nil {
-			return err
-		}
-	}
-
 	fi, err := os.Stat(fp)
 	if err != nil {
 		return err
@@ -162,7 +177,7 @@ func UploadModel(sk *ecdsa.PrivateKey, fp string) error {
 		return err
 	}
 
-	fmt.Printf("upload and submit model %s\n", mrm.Name)
+	log.Printf("upload and submit model %s\n", mrm.Name)
 
 	return nil
 }

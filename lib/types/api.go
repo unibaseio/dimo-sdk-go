@@ -22,12 +22,10 @@ type Auth struct {
 
 type ModelResult struct {
 	ModelMeta
-	IsPaid bool
 }
 
 type SpaceResult struct {
 	SpaceMeta
-	IsPaid bool
 }
 
 type ListModelResult struct {
@@ -38,21 +36,8 @@ type ListSpaceResult struct {
 	Spaces []SpaceResult
 }
 
-type ListPromptResult struct {
-	Prompts []PromptMeta
-}
-
 type ListGPUResult struct {
 	GPUs []GPUMeta
-}
-
-type NFTResult struct {
-	NFTMeta
-	StoredOn []common.Address
-}
-
-type ListNFTResult struct {
-	NFTs []NFTResult
 }
 
 type AccountResult struct {
