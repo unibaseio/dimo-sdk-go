@@ -9,6 +9,7 @@ import (
 	mrand "math/rand"
 	"net"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/mem"
 	"github.com/shirou/gopsutil/v3/disk"
 	"golang.org/x/crypto/sha3"
 )
@@ -134,4 +137,45 @@ func GetGPUInfo(id string) (types.GPUCore, error) {
 	res.Name = slice[1]
 	res.Memory = slice[2]
 	return res, nil
+}
+
+const (
+	KiB = 1024
+	MiB = 1048576
+	GiB = 1073741824
+	TiB = 1099511627776
+
+	KB = 1e3
+	MB = 1e6
+	GB = 1e9
+	TB = 1e12
+)
+
+func FormatBytes(i int64) (result string) {
+	switch {
+	case i >= TiB:
+		result = fmt.Sprintf("%.02f TiB", float64(i)/TiB)
+	case i >= GiB:
+		result = fmt.Sprintf("%.02f GiB", float64(i)/GiB)
+	case i >= MiB:
+		result = fmt.Sprintf("%.02f MiB", float64(i)/MiB)
+	case i >= KiB:
+		result = fmt.Sprintf("%.02f KiB", float64(i)/KiB)
+	default:
+		result = fmt.Sprintf("%d B", i)
+	}
+	return
+}
+
+func GetHardwareInfo() types.HardwareInfo {
+	res := types.HardwareInfo{}
+	ci, err := cpu.Info()
+	if err == nil && len(ci) > 0 {
+		res.CPU = ci[0].ModelName + ", " + strconv.Itoa(len(ci)) + " Cores"
+	}
+	vms, err := mem.VirtualMemory()
+	if err == nil {
+		res.Memory = FormatBytes(int64(vms.Total))
+	}
+	return res
 }

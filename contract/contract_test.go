@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
-	"log"
 	"math/big"
 	"math/rand"
 	"os"
@@ -24,8 +23,8 @@ func TestTransfer(t *testing.T) {
 	valt := big.NewInt(1e18)
 	valt.Mul(valt, big.NewInt(100))
 
-	val := big.NewInt(1e15)
-	addr = common.HexToAddress("0x49c4726F9cbe863951d6Fec605D273D4A23b1B98")
+	val := big.NewInt(8e15)
+	addr = common.HexToAddress("0xd03E6fE1824917F1B42a07F0Baa9ac025DF8c984")
 	err := transfer(addr, val, valt)
 	if err != nil {
 		t.Fatal(err)
@@ -225,15 +224,18 @@ func TestBlock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	log.Println(latest)
-
-	for i := latest; i > latest-5; i-- {
-		bk, err := client.BlockByNumber(ctx, big.NewInt(int64(i)))
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Log(bk)
+	fmt.Println(latest)
+	latest, err = GetEpoch()
+	if err != nil {
+		t.Fatal(err)
 	}
+	fmt.Println(latest)
+	eb, _, err := GetEpochInfo(latest)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Println(eb.Uint64())
 }
 
 func TestChoose(t *testing.T) {
